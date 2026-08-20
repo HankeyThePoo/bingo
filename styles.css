@@ -1,471 +1,64 @@
-:root {
-  color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #050711;
-  color: #fff;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
-html {
-  min-width: 320px;
-  min-height: 100%;
-  background: #050711;
-  scrollbar-width: none;
-}
-
-html::-webkit-scrollbar,
-body::-webkit-scrollbar {
+#bingo::-webkit-scrollbar {
   display: none;
 }
 
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-  overflow-x: hidden;
-  background:
-    radial-gradient(circle at 50% -20%, rgba(73, 241, 250, 0.065), transparent 42rem),
-    #050711;
+#bingo {
+  --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
+  --line: rgba(255, 255, 255, 0.1);
+  padding: 1rem 12px 3rem;
+  color: #fff;
+  font-family: "Monument Extended", Inter, system-ui, sans-serif;
+  scrollbar-width: none;
 }
 
-button {
+#bingo *,
+#bingo *::before,
+#bingo *::after {
+  box-sizing: border-box;
+}
+
+#bingo .wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: auto;
+}
+
+#bingo h1 {
+  margin: 1rem 0 2rem;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+}
+
+#bingo button {
   border: 0;
   font: inherit;
 }
 
-button:disabled {
+#bingo button:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: 0.55;
 }
 
-#release-radar-bingo {
-  --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
-  --gradient-soft: linear-gradient(
-    135deg,
-    rgba(73, 241, 250, 0.15),
-    rgba(123, 176, 247, 0.13) 50%,
-    rgba(141, 100, 245, 0.16)
-  );
-  --line: rgba(255, 255, 255, 0.1);
-  --muted: rgba(255, 255, 255, 0.58);
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  min-height: 100vh;
-  padding: 28px 14px 42px;
-  overflow: hidden;
-  place-items: start center;
-  font-family: "Monument Extended", Inter, ui-sans-serif, system-ui, sans-serif;
+#bingo button:focus-visible {
+  outline: 0;
 }
 
-#release-radar-bingo *,
-#release-radar-bingo *::before,
-#release-radar-bingo *::after {
-  box-sizing: border-box;
-}
-
-#release-radar-bingo .ambient {
-  position: absolute;
-  z-index: -2;
-  width: 34rem;
-  height: 34rem;
-  border-radius: 50%;
-  opacity: 0.1;
-  filter: blur(100px);
-  pointer-events: none;
-}
-
-#release-radar-bingo .ambient-left {
-  top: 15rem;
-  left: -24rem;
-  background: #49f1fa;
-}
-
-#release-radar-bingo .ambient-right {
-  top: 22rem;
-  right: -24rem;
-  background: #8d64f5;
-}
-
-#release-radar-bingo .app-shell {
-  width: min(100%, 748px);
-  margin: 0 auto;
-}
-
-#release-radar-bingo .hero {
-  margin-bottom: 24px;
-  text-align: center;
-}
-
-#release-radar-bingo .eyebrow,
-#release-radar-bingo .card-kicker {
-  font-size: 0.64rem;
-  font-weight: 850;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-}
-
-#release-radar-bingo .eyebrow {
-  margin: 0 0 10px;
-  background: var(--gradient);
-  background-clip: text;
-  color: transparent;
-}
-
-#release-radar-bingo h1 {
-  margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.35rem);
-  font-weight: 900;
-  letter-spacing: -0.055em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-#release-radar-bingo h1 span {
-  background: var(--gradient);
-  background-clip: text;
-  color: transparent;
-}
-
-#release-radar-bingo .tagline {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.82rem;
-}
-
-#release-radar-bingo .glass {
-  position: relative;
-  border: 1px solid var(--line);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.024)),
-    rgba(15, 18, 29, 0.76);
-  box-shadow:
-    0 18px 52px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-#release-radar-bingo .glass::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 0.55px, transparent 0.55px);
-  background-size: 5px 5px;
-  opacity: 0.16;
-  pointer-events: none;
-}
-
-#release-radar-bingo .glass > * {
-  position: relative;
-  z-index: 1;
-}
-
-#release-radar-bingo .board-card {
-  padding: 17px;
-  border-radius: 22px;
-  transition:
-    border-color 260ms ease,
-    box-shadow 260ms ease;
-}
-
-#release-radar-bingo .board-card::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  z-index: 0;
-  padding: 1px;
-  border-radius: inherit;
-  background: var(--gradient);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 260ms ease;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-#release-radar-bingo .board-card.has-bingo {
-  box-shadow:
-    0 20px 64px rgba(91, 105, 226, 0.24),
-    0 0 40px rgba(73, 241, 250, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-#release-radar-bingo .board-card.has-bingo::after {
-  opacity: 0.8;
-}
-
-#release-radar-bingo .card-header {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 3px;
-}
-
-#release-radar-bingo .card-kicker {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--muted);
-  font-size: 0.56rem;
-  letter-spacing: 0.14em;
-}
-
-#release-radar-bingo h2 {
-  margin: 0;
-  font-size: 0.94rem;
-  font-weight: 850;
-  letter-spacing: 0.025em;
-  text-transform: uppercase;
-}
-
-#release-radar-bingo .board-card.has-bingo h2 {
-  background: var(--gradient);
-  background-clip: text;
-  color: transparent;
-}
-
-#release-radar-bingo .marked-count {
-  color: var(--muted);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-#release-radar-bingo .progress-track {
-  height: 3px;
-  margin: 12px 3px 11px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-}
-
-#release-radar-bingo .progress-fill {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--gradient);
-  box-shadow: 0 0 12px rgba(73, 241, 250, 0.28);
-  transition: width 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-#release-radar-bingo .radar-heading {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: clamp(4px, 0.75vw, 7px);
-  margin-bottom: 7px;
-}
-
-#release-radar-bingo .radar-heading span {
-  background: var(--gradient);
-  background-clip: text;
-  color: transparent;
-  font-size: 0.76rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-align: center;
-}
-
-#release-radar-bingo .board {
-  display: grid;
-  width: 100%;
-  aspect-ratio: 1;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: clamp(4px, 0.75vw, 7px);
-}
-
-#release-radar-bingo .tile {
-  --tile-font: 12px;
-  position: relative;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(7px, 1vw, 11px);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: clamp(8px, 1.35vw, 13px);
-  background:
-    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.065), transparent 37%),
-    rgba(6, 8, 18, 0.76);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.26);
-  color: #fff;
-  cursor: pointer;
-  text-align: center;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    border-color 200ms ease,
-    box-shadow 200ms ease,
-    color 200ms ease,
-    filter 200ms ease,
-    transform 200ms ease;
-  animation: tile-deal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: var(--deal-delay);
-}
-
-#release-radar-bingo .tile::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--gradient);
-  opacity: 0;
-  transition: opacity 220ms ease;
-}
-
-#release-radar-bingo .tile::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  z-index: 5;
-  padding: 2px;
-  border-radius: inherit;
-  background: var(--gradient);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 180ms ease;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-#release-radar-bingo .tile[aria-pressed="true"] {
-  border-color: transparent;
-  color: #292b34;
-  box-shadow:
-    0 8px 22px rgba(91, 105, 226, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-
-#release-radar-bingo .tile[aria-pressed="true"]::before {
-  opacity: 1;
-}
-
-#release-radar-bingo .tile-copy,
-#release-radar-bingo .tile-mark,
-#release-radar-bingo .tile-badge {
-  position: relative;
-  z-index: 1;
-}
-
-#release-radar-bingo .tile-copy {
-  display: block;
-  max-width: 100%;
-  font-size: var(--tile-font);
-  font-weight: 850;
-  line-height: 1.15;
-  overflow-wrap: normal;
-  text-wrap: balance;
-  text-transform: uppercase;
-}
-
-#release-radar-bingo .tile-mark {
-  position: absolute;
-  top: 8px;
-  right: 9px;
-  opacity: 0;
-  font-size: clamp(0.55rem, 1.3vw, 0.78rem);
-  line-height: 1;
-  transform: scale(0.5) rotate(-25deg);
-  transition:
-    opacity 180ms ease,
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-#release-radar-bingo .tile[aria-pressed="true"] .tile-mark {
-  opacity: 0.72;
-  transform: scale(1) rotate(0);
-}
-
-#release-radar-bingo .tile-badge {
-  position: absolute;
-  top: 8px;
-  left: 9px;
-  font-size: clamp(0.38rem, 0.9vw, 0.54rem);
-  font-weight: 900;
-  letter-spacing: 0.12em;
-}
-
-#release-radar-bingo .free-tile {
-  cursor: default;
-}
-
-#release-radar-bingo .free-tile .tile-copy {
-  padding-top: 10px;
-}
-
-#release-radar-bingo .tile.winning-line {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.44),
-    0 0 23px rgba(73, 241, 250, 0.3),
-    0 8px 22px rgba(91, 105, 226, 0.22);
-}
-
-#release-radar-bingo .tile.just-marked {
-  animation: mark-pop 420ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-#release-radar-bingo .board-message {
-  grid-column: 1 / -1;
-  align-self: center;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-align: center;
-}
-
-#release-radar-bingo .actions {
+#bingo .actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  margin-top: 15px;
+  gap: 12px;
+  margin-bottom: 1.5rem;
 }
 
-#release-radar-bingo .button {
+#bingo .button,
+#bingo .tile {
   position: relative;
-  display: inline-flex;
-  width: 138px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.72rem;
-  font-weight: 850;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  transition:
-    filter 180ms ease,
-    transform 180ms ease,
-    box-shadow 180ms ease;
 }
 
-#release-radar-bingo .button.primary {
-  background: var(--gradient);
-  color: #292b34;
-}
-
-#release-radar-bingo .button.secondary {
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.065);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-
-#release-radar-bingo .button::after {
+#bingo .button::after,
+#bingo .tile::after {
   content: "";
   position: absolute;
   inset: -4px;
@@ -474,48 +67,171 @@ button:disabled {
   background: var(--gradient);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 180ms ease;
+  transition: opacity 0.18s ease;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
 
-#release-radar-bingo .game-note {
-  margin: 14px 0 0;
-  color: rgba(255, 255, 255, 0.35);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.62rem;
-  font-weight: 650;
-  letter-spacing: 0.07em;
+#bingo.keyboard-input .button:focus,
+#bingo.keyboard-input .tile:focus {
+  outline: none;
+}
+
+#bingo.keyboard-input .button:focus::after,
+#bingo.keyboard-input .tile:focus::after {
+  opacity: 1;
+}
+
+#bingo .button {
+  display: inline-flex;
+  width: 128px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--gradient);
+  color: #32323a;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition:
+    filter 0.18s ease,
+    transform 0.18s ease;
+}
+
+#bingo .glass {
+  position: relative;
+  border-radius: 1rem;
+}
+
+#bingo .glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+#bingo .glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+#bingo .card {
+  padding: 16px;
+}
+
+#bingo .board {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#bingo .tile {
+  --tile-font: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0.65rem;
+  background: rgba(0, 0, 0, 0.34);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  cursor: pointer;
+  perspective: 800px;
+  -webkit-tap-highlight-color: transparent;
+  animation: deal 0.42s ease both;
+  animation-delay: var(--deal-delay);
+}
+
+#bingo .tile::after {
+  inset: 1px;
+  z-index: 4;
+  padding: 1px;
+  border-radius: inherit;
+}
+
+#bingo .inner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.38s cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+#bingo .tile[aria-pressed="true"] .inner {
+  transform: rotateY(180deg);
+}
+
+#bingo .face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: inherit;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+#bingo .front {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+#bingo .back {
+  background: var(--gradient);
+  color: #32323a;
+  transform: rotateY(180deg);
+}
+
+#bingo .label {
+  display: block;
+  max-width: 100%;
+  font-size: var(--tile-font);
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: normal;
   text-align: center;
   text-transform: uppercase;
+  text-wrap: balance;
 }
 
-#release-radar-bingo .toast {
-  position: fixed;
-  z-index: 20;
-  left: 50%;
-  bottom: 24px;
-  min-width: 220px;
-  padding: 12px 18px;
-  border-radius: 14px;
-  color: #fff;
-  font-size: 0.68rem;
-  font-weight: 850;
+#bingo .free-tile {
+  cursor: default;
+}
+
+#bingo .tile.winning-line {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.36),
+    0 0 18px rgba(73, 241, 250, 0.28);
+}
+
+#bingo .tile.win {
+  animation: win 0.52s ease;
+}
+
+#bingo .board-message {
+  grid-column: 1 / -1;
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-align: center;
-  transform: translateX(-50%);
 }
 
-#release-radar-bingo .toast.showing {
-  animation: toast-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-#release-radar-bingo [hidden] {
-  display: none !important;
-}
-
-#release-radar-bingo .sr-only {
+#bingo .sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -527,166 +243,65 @@ button:disabled {
   border: 0;
 }
 
-#release-radar-bingo.keyboard-input button:focus {
-  outline: none;
-}
-
-#release-radar-bingo.keyboard-input .button:focus::after,
-#release-radar-bingo.keyboard-input .tile:focus::after {
-  opacity: 1;
-}
-
 @media (hover: hover) {
-  #release-radar-bingo .button:not(:disabled):hover {
-    filter: brightness(1.08) saturate(1.04);
-    box-shadow: 0 8px 24px rgba(91, 105, 226, 0.2);
-    transform: translateY(-1px);
-  }
-
-  #release-radar-bingo .tile:not(.free-tile):hover {
-    border-color: rgba(123, 176, 247, 0.35);
+  #bingo .button:not(:disabled):hover {
     filter: brightness(1.08);
     transform: translateY(-1px);
   }
 
-  #release-radar-bingo .tile[aria-pressed="true"]:hover {
-    filter: brightness(1.05) saturate(1.03);
+  #bingo .tile:not(.free-tile):hover::after {
+    opacity: 0.65;
   }
 }
 
 @media (max-width: 560px) {
-  #release-radar-bingo {
-    padding: 20px 9px 34px;
+  #bingo {
+    padding: 0.75rem 8px 2rem;
   }
 
-  #release-radar-bingo .hero {
-    margin-bottom: 18px;
+  #bingo h1 {
+    margin: 0.8rem 0 1.4rem;
+    font-size: clamp(1.45rem, 7vw, 2rem);
   }
 
-  #release-radar-bingo .eyebrow {
-    margin-bottom: 8px;
-    font-size: 0.55rem;
+  #bingo .actions {
+    margin-bottom: 1rem;
   }
 
-  #release-radar-bingo h1 {
-    font-size: clamp(1.5rem, 7vw, 1.9rem);
-  }
-
-  #release-radar-bingo .tagline {
-    margin-top: 8px;
-    font-size: 0.72rem;
-  }
-
-  #release-radar-bingo .board-card {
-    padding: 10px;
-    border-radius: 17px;
-  }
-
-  #release-radar-bingo .card-header {
-    min-height: 40px;
-    padding: 0 2px;
-  }
-
-  #release-radar-bingo .card-kicker {
-    display: none;
-  }
-
-  #release-radar-bingo h2 {
-    font-size: 0.79rem;
-  }
-
-  #release-radar-bingo .marked-count {
-    font-size: 0.57rem;
-  }
-
-  #release-radar-bingo .progress-track {
-    margin: 8px 2px 8px;
-  }
-
-  #release-radar-bingo .radar-heading {
-    margin-bottom: 4px;
-    gap: 4px;
-  }
-
-  #release-radar-bingo .radar-heading span {
-    font-size: 0.66rem;
-  }
-
-  #release-radar-bingo .board {
-    gap: 4px;
-  }
-
-  #release-radar-bingo .tile {
-    padding: 5px;
-  }
-
-  #release-radar-bingo .tile-mark {
-    top: 5px;
-    right: 6px;
-  }
-
-  #release-radar-bingo .tile-badge {
-    top: 5px;
-    left: 6px;
-  }
-
-  #release-radar-bingo .actions {
-    margin-top: 12px;
-  }
-
-  #release-radar-bingo .button {
-    width: 124px;
-    height: 42px;
-    font-size: 0.68rem;
-  }
-
-  #release-radar-bingo .game-note {
-    margin-top: 12px;
-    padding: 0 12px;
-    font-size: 0.55rem;
-    line-height: 1.4;
-  }
-}
-
-@media (max-width: 360px) {
-  #release-radar-bingo {
-    padding-inline: 7px;
-  }
-
-  #release-radar-bingo .board-card {
+  #bingo .card {
     padding: 8px;
   }
 
-  #release-radar-bingo .marked-count {
-    letter-spacing: 0.03em;
+  #bingo .board {
+    gap: 4px;
+  }
+
+  #bingo .tile {
+    border-radius: 0.5rem;
+  }
+
+  #bingo .face {
+    padding: 5px;
   }
 }
 
-@keyframes tile-deal {
+@keyframes deal {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.95);
+    transform: translateY(5px);
   }
 }
 
-@keyframes mark-pop {
-  45% {
-    transform: translateY(-4px) scale(1.045);
-  }
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 10px) scale(0.96);
+@keyframes win {
+  50% {
+    transform: translateY(-5px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #release-radar-bingo *,
-  #release-radar-bingo *::before,
-  #release-radar-bingo *::after {
-    scroll-behavior: auto !important;
+  #bingo *,
+  #bingo *::before,
+  #bingo *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -694,8 +309,8 @@ button:disabled {
 }
 
 @media (forced-colors: active) {
-  #release-radar-bingo .tile[aria-pressed="true"],
-  #release-radar-bingo .button.primary {
+  #bingo .back,
+  #bingo .button {
     border: 2px solid Highlight;
     background: Highlight;
     color: HighlightText;

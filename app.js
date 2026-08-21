@@ -50,7 +50,7 @@ var tiles_default = { tiles: [
 	"It's Friday"
 ] };
 var CENTER_INDEX = Math.floor(25 / 2);
-var FREE_TILE = "It's Friday";
+var FRIDAY_TILE = "It's Friday";
 var WINNING_LINES = [
 	...Array.from({ length: 5 }, (_, row) => Array.from({ length: 5 }, (_, column) => row * 5 + column)),
 	...Array.from({ length: 5 }, (_, column) => Array.from({ length: 5 }, (_, row) => row * 5 + column)),
@@ -77,7 +77,7 @@ function normalizeTiles(data) {
 	const tiles = source.map((tile) => tile.trim());
 	if (new Set(tiles).size !== tiles.length) throw new Error("Tile data contains duplicates");
 	if (tiles.filter((tile) => tile !== "It's Friday").length < 24) throw new Error("Not enough unique tiles");
-	return tiles.includes("It's Friday") ? tiles : [...tiles, FREE_TILE];
+	return tiles.includes("It's Friday") ? tiles : [...tiles, FRIDAY_TILE];
 }
 function shuffled(values, random = Math.random) {
 	const result = [...values];
@@ -92,14 +92,14 @@ function shuffled(values, random = Math.random) {
 	return result;
 }
 function createBoard(tiles, random = Math.random) {
-	const pool = tiles.filter((tile) => tile !== FREE_TILE);
+	const pool = tiles.filter((tile) => tile !== FRIDAY_TILE);
 	if (pool.length < 24) throw new Error("Not enough unique tiles");
 	const layout = shuffled(pool, random).slice(0, 24);
-	layout.splice(CENTER_INDEX, 0, FREE_TILE);
+	layout.splice(CENTER_INDEX, 0, FRIDAY_TILE);
 	return layout;
 }
 function startingMarks(marked = []) {
-	return /* @__PURE__ */ new Set([CENTER_INDEX, ...marked]);
+	return new Set(marked);
 }
 function winningLineKeys(marked) {
 	const markedSet = new Set(marked);
@@ -110,7 +110,7 @@ function encodeSnapshot(layout, marked, tiles) {
 	const tileIndexes = layout.map((tile) => tiles.indexOf(tile));
 	if (tileIndexes.some((index) => index < 0)) throw new Error("Unknown tile");
 	const payload = {
-		version: 1,
+		version: 2,
 		tiles: tileIndexes,
 		marked: [...startingMarks(marked)].sort((left, right) => left - right)
 	};
@@ -120,7 +120,7 @@ function decodeSnapshot(code, tiles) {
 	const normalized = code.trim().replaceAll("-", "+").replaceAll("_", "/");
 	const padding = "=".repeat((4 - normalized.length % 4) % 4);
 	const data = JSON.parse(atob(normalized + padding));
-	if (data.version !== 1) throw new Error("Snapshot version is invalid");
+	if (data.version !== 1 && data.version !== 2) throw new Error("Snapshot version is invalid");
 	if (!Array.isArray(data.tiles) || data.tiles.length !== 25) throw new Error("Snapshot tiles are invalid");
 	if (!Array.isArray(data.marked)) throw new Error("Snapshot marks are invalid");
 	if (data.tiles.some((index) => !Number.isInteger(index) || index < 0 || index >= tiles.length)) throw new Error("Snapshot tile index is invalid");
@@ -128,15 +128,16 @@ function decodeSnapshot(code, tiles) {
 	if (data.marked.some((index) => !Number.isInteger(index) || index < 0 || index >= 25)) throw new Error("Snapshot mark is invalid");
 	const layout = data.tiles.map((index) => tiles[index]);
 	if (layout.some((tile) => tile === void 0)) throw new Error("Snapshot contains an unknown tile");
-	if (layout[CENTER_INDEX] !== "It's Friday") throw new Error("Snapshot free tile is invalid");
+	if (layout[CENTER_INDEX] !== "It's Friday") throw new Error("Snapshot Friday tile is invalid");
 	return {
 		layout,
-		marked: [...startingMarks(data.marked)].sort((left, right) => left - right)
+		marked: [...startingMarks(data.version === 1 ? data.marked.filter((index) => index !== CENTER_INDEX) : data.marked)].sort((left, right) => left - right)
 	};
 }
 //#endregion
 //#region src/main.ts
-var STORAGE_KEY = "release-radar-bingo:card:v1";
+var STORAGE_KEY = "release-radar-bingo:card:v2";
+var reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 var rootElement = document.querySelector("#bingo, #release-radar-bingo");
 if (!rootElement) throw new Error("Release Radar Bingo root is missing");
 var root = rootElement;
@@ -148,6 +149,7 @@ var required = (selector) => {
 	return element;
 };
 var ui = {
+	card: required(".card"),
 	board: required(".board"),
 	status: required("#bingo-status"),
 	shuffle: required("[data-action=\"shuffle\"]"),
@@ -160,7 +162,8 @@ var state = {
 	completed: /* @__PURE__ */ new Set(),
 	ready: false,
 	fitFrame: 0,
-	buttonTimer: 0
+	buttonTimer: 0,
+	celebrationTimer: 0
 };
 function markup() {
 	return `
@@ -216,19 +219,14 @@ function createFace(className, text) {
 	return face;
 }
 function createTile(text, index) {
-	const isFree = index === CENTER_INDEX;
 	const marked = state.marked.has(index);
 	const tile = createElement("button", {
-		className: `tile${isFree ? " free-tile" : ""}`,
+		className: "tile",
 		attributes: {
 			type: "button",
 			"data-index": String(index),
-			"aria-label": isFree ? `${text}, free space, marked` : `${text}, ${marked ? "marked" : "not marked"}`,
-			"aria-pressed": String(marked),
-			...isFree ? {
-				"aria-disabled": "true",
-				tabindex: "-1"
-			} : {}
+			"aria-label": `${text}, ${marked ? "marked" : "not marked"}`,
+			"aria-pressed": String(marked)
 		}
 	});
 	tile.style.setProperty("--deal-delay", `${index * 12}ms`);
@@ -242,25 +240,49 @@ function scheduleLabelFit() {
 	state.fitFrame = requestAnimationFrame(() => {
 		state.fitFrame = 0;
 		for (const tile of ui.board.querySelectorAll(".tile")) {
+			const face = tile.querySelector(".front");
 			const label = tile.querySelector(".label");
-			if (!label) continue;
-			let low = 7.5;
-			let high = Math.max(low, Math.min(13.5, tile.clientWidth * .19));
+			if (!face || !label) continue;
+			let low = 8;
+			let high = Math.max(low, Math.min(face.clientWidth, face.clientHeight) * .6);
 			let best = low;
 			for (let attempt = 0; attempt < 7; attempt += 1) {
 				const size = (low + high) / 2;
-				tile.style.setProperty("--tile-font", `${size}px`);
-				if (label.scrollWidth <= tile.clientWidth - 14 && label.scrollHeight <= tile.clientHeight - 14) {
+				tile.style.setProperty("--size", `${size}px`);
+				if (label.scrollWidth <= face.clientWidth - 12 && label.scrollHeight <= face.clientHeight - 12) {
 					best = size;
 					low = size;
 				} else high = size;
 			}
-			tile.style.setProperty("--tile-font", `${best}px`);
+			tile.style.setProperty("--size", `${best}px`);
 		}
 	});
 }
+function clearCelebration() {
+	window.clearTimeout(state.celebrationTimer);
+	state.celebrationTimer = 0;
+	ui.card.classList.remove("celebrating");
+	for (const tile of ui.board.querySelectorAll(".win")) {
+		tile.classList.remove("win");
+		tile.style.removeProperty("--win-order");
+	}
+}
+function celebrateBingo(newWins) {
+	if (reducedMotion?.matches) return;
+	clearCelebration();
+	ui.card.offsetWidth;
+	[...new Set(newWins.flatMap((key) => key.split(",").map(Number)))].forEach((index, order) => {
+		const tile = ui.board.children[index];
+		if (!(tile instanceof HTMLElement)) return;
+		tile.style.setProperty("--win-order", String(order));
+		tile.classList.add("win");
+	});
+	ui.card.classList.add("celebrating");
+	state.celebrationTimer = window.setTimeout(clearCelebration, 1850);
+}
 function renderBoard(layout, marked) {
 	if (layout.length !== 25) throw new Error("Invalid board layout");
+	clearCelebration();
 	state.layout = [...layout];
 	state.marked = startingMarks(marked);
 	state.completed.clear();
@@ -281,16 +303,11 @@ function checkWins(celebrate) {
 		tile.classList.toggle("winning-line", winningIndexes.has(index));
 	});
 	if (!celebrate || newWins.length === 0) return;
-	for (const tile of ui.board.querySelectorAll(".winning-line")) {
-		tile.classList.remove("win");
-		tile.offsetWidth;
-		tile.classList.add("win");
-	}
+	celebrateBingo(newWins);
 	announce(newWins.length === 1 ? "Bingo! One line completed." : `Bingo! ${newWins.length} lines completed.`);
 }
 function setTileMarked(tile) {
 	const index = Number(tile.dataset.index);
-	if (index === CENTER_INDEX) return;
 	const marked = !state.marked.has(index);
 	if (marked) state.marked.add(index);
 	else state.marked.delete(index);

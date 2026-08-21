@@ -129,6 +129,10 @@
   padding: 16px;
 }
 
+#bingo .card.celebrating::before {
+  animation: ceremony-frame 1.75s ease-out;
+}
+
 #bingo .board {
   display: grid;
   width: 100%;
@@ -138,11 +142,12 @@
 }
 
 #bingo .tile {
-  --tile-font: 12px;
+  --size: 14px;
+  --tile-radius: 0.65rem;
   min-width: 0;
   min-height: 0;
   padding: 0;
-  border-radius: 0.65rem;
+  border-radius: var(--tile-radius);
   background: rgba(0, 0, 0, 0.34);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   color: #fff;
@@ -154,16 +159,15 @@
 }
 
 #bingo .tile::after {
-  inset: 1px;
   z-index: 4;
-  padding: 1px;
-  border-radius: inherit;
+  border-radius: calc(var(--tile-radius) + 4px);
 }
 
 #bingo .inner {
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   transform-style: preserve-3d;
   transition: transform 0.38s cubic-bezier(0.2, 0.75, 0.25, 1);
 }
@@ -191,25 +195,20 @@
 }
 
 #bingo .back {
-  background: var(--gradient);
-  color: #32323a;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  color: #fff;
   transform: rotateY(180deg);
 }
 
 #bingo .label {
-  display: block;
-  max-width: 100%;
-  font-size: var(--tile-font);
+  font-size: var(--size);
   font-weight: 800;
   line-height: 1.1;
+  hyphens: none;
   overflow-wrap: normal;
   text-align: center;
-  text-transform: uppercase;
-  text-wrap: balance;
-}
-
-#bingo .free-tile {
-  cursor: default;
+  word-break: keep-all;
 }
 
 #bingo .tile.winning-line {
@@ -219,7 +218,9 @@
 }
 
 #bingo .tile.win {
-  animation: win 0.52s ease;
+  z-index: 3;
+  animation: ceremony-tile 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--win-order, 0) * 85ms);
 }
 
 #bingo .board-message {
@@ -249,8 +250,8 @@
     transform: translateY(-1px);
   }
 
-  #bingo .tile:not(.free-tile):hover::after {
-    opacity: 0.65;
+  #bingo:not(.keyboard-input) .tile:hover::after {
+    opacity: 1;
   }
 }
 
@@ -277,7 +278,7 @@
   }
 
   #bingo .tile {
-    border-radius: 0.5rem;
+    --tile-radius: 0.5rem;
   }
 
   #bingo .face {
@@ -292,9 +293,60 @@
   }
 }
 
-@keyframes win {
-  50% {
-    transform: translateY(-5px);
+@keyframes ceremony-tile {
+  0% {
+    filter: brightness(1);
+    transform: translateY(0) scale(1);
+  }
+
+  22% {
+    filter: brightness(1.35);
+    transform: translateY(-38px) scale(1.08);
+  }
+
+  43% {
+    transform: translateY(10px) scale(0.97);
+  }
+
+  60% {
+    transform: translateY(-15px) scale(1.04);
+  }
+
+  76% {
+    transform: translateY(5px) scale(0.99);
+  }
+
+  90% {
+    transform: translateY(-3px) scale(1.01);
+  }
+
+  100% {
+    filter: brightness(1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ceremony-frame {
+  0%,
+  100% {
+    border-color: var(--line);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+
+  24% {
+    border-color: rgba(73, 241, 250, 0.8);
+    box-shadow:
+      0 0 0 2px rgba(73, 241, 250, 0.25),
+      0 0 42px rgba(73, 241, 250, 0.36),
+      0 10px 28px rgba(0, 0, 0, 0.4);
+  }
+
+  52% {
+    border-color: rgba(141, 100, 245, 0.85);
+    box-shadow:
+      0 0 0 3px rgba(141, 100, 245, 0.2),
+      0 0 54px rgba(141, 100, 245, 0.38),
+      0 10px 28px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -309,11 +361,16 @@
 }
 
 @media (forced-colors: active) {
-  #bingo .back,
   #bingo .button {
     border: 2px solid Highlight;
     background: Highlight;
     color: HighlightText;
+  }
+
+  #bingo .back {
+    border: 2px solid Highlight;
+    background: Canvas;
+    color: CanvasText;
   }
 }
 /*$vite$:1*/

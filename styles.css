@@ -190,6 +190,15 @@ html {
   border-radius: 12px;
 }
 
+#release-radar-bingo .tile.winning-opportunity::after {
+  animation: bingo-opportunity-pulse 2.6s ease-in-out infinite;
+}
+
+#release-radar-bingo.keyboard-input .tile.winning-opportunity:focus::after {
+  animation: none;
+  opacity: 1;
+}
+
 #release-radar-bingo .tile-inner {
   display: block;
   position: relative;
@@ -350,6 +359,17 @@ html {
   }
 }
 
+@keyframes bingo-opportunity-pulse {
+  0%,
+  100% {
+    opacity: 0.08;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
 @keyframes bingo-card-glow {
   0%,
   100% {
@@ -384,6 +404,11 @@ html {
 
   #release-radar-bingo .tile:hover .tile-face {
     filter: brightness(1.08);
+  }
+
+  #release-radar-bingo .tile.winning-opportunity:hover::after {
+    animation: none;
+    opacity: 1;
   }
 }
 
@@ -453,6 +478,11 @@ html {
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  #release-radar-bingo .tile.winning-opportunity::after {
+    animation: none !important;
+    opacity: 0.4;
   }
 }
 

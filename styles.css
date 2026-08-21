@@ -20,7 +20,7 @@ body {
   );
   --line: rgba(255, 255, 255, 0.1);
   --duration-rewind: 200ms;
-  height: 100%;
+  height: 100dvh;
   min-height: 0;
   padding: 1rem 12px 3rem;
   overflow: clip;

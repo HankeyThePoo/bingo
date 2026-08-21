@@ -155,13 +155,17 @@
   cursor: pointer;
   perspective: 800px;
   -webkit-tap-highlight-color: transparent;
+}
+
+#bingo .tile.dealing {
   animation: deal 0.42s ease both;
   animation-delay: var(--deal-delay);
 }
 
 #bingo .tile::after {
+  inset: -3px;
   z-index: 4;
-  border-radius: calc(var(--tile-radius) + 4px);
+  border-radius: calc(var(--tile-radius) + 3px);
 }
 
 #bingo .inner {
@@ -253,6 +257,14 @@
   #bingo .button:not(:disabled):hover {
     filter: brightness(1.08) saturate(1.04);
   }
+
+  #bingo .tile:hover {
+    z-index: 5;
+  }
+}
+
+#bingo.keyboard-input .tile:focus {
+  z-index: 5;
 }
 
 @media (max-width: 560px) {

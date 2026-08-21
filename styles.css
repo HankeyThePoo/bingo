@@ -1,0 +1,493 @@
+#release-radar-bingo {
+  --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
+  --gradient-background-soft: linear-gradient(
+    135deg,
+    rgba(73, 241, 250, 0.12),
+    rgba(123, 176, 247, 0.12) 50%,
+    rgba(141, 100, 245, 0.12)
+  );
+  --line: rgba(255, 255, 255, 0.1);
+  min-height: 100vh;
+  padding: 1rem 12px 3rem;
+  color: white;
+  font-family: "Monument Extended", Inter, system-ui, sans-serif;
+  scrollbar-width: none;
+}
+
+#release-radar-bingo::-webkit-scrollbar {
+  display: none;
+}
+
+#release-radar-bingo *,
+#release-radar-bingo *::before,
+#release-radar-bingo *::after {
+  box-sizing: border-box;
+}
+
+#release-radar-bingo .bingo-shell {
+  width: min(100%, 720px);
+  margin: auto;
+}
+
+#release-radar-bingo h1 {
+  margin: 1rem 0 2rem;
+  color: white;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+}
+
+#release-radar-bingo button {
+  border: 0;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#release-radar-bingo button:focus-visible {
+  outline: 0;
+}
+
+#release-radar-bingo button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#release-radar-bingo .actions,
+#release-radar-bingo .confirmation-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+#release-radar-bingo .actions {
+  margin-bottom: 12px;
+}
+
+#release-radar-bingo .button {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 128px;
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--gradient);
+  color: #32323a;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition:
+    filter 0.18s ease,
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+#release-radar-bingo .button::after,
+#release-radar-bingo .tile::after {
+  content: "";
+  position: absolute;
+  padding: 2px;
+  background: var(--gradient);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+#release-radar-bingo .button::after {
+  inset: -4px;
+  border-radius: 18px;
+}
+
+#release-radar-bingo.keyboard-input .button:focus::after,
+#release-radar-bingo.keyboard-input .tile:focus::after {
+  opacity: 1;
+}
+
+#release-radar-bingo .glass {
+  position: relative;
+  border-radius: 1rem;
+}
+
+#release-radar-bingo .glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+#release-radar-bingo .glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+#release-radar-bingo .board-card {
+  padding: 16px;
+}
+
+#release-radar-bingo .board-status {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+#release-radar-bingo .board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  aspect-ratio: 1;
+}
+
+#release-radar-bingo .tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 10px;
+  appearance: none;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  perspective: 720px;
+  touch-action: manipulation;
+  transform: translateZ(0);
+}
+
+#release-radar-bingo .tile::after {
+  inset: -2px;
+  z-index: 3;
+  border-radius: 12px;
+}
+
+#release-radar-bingo .tile-inner {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 380ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+#release-radar-bingo .tile.marked .tile-inner {
+  transform: rotateY(180deg);
+}
+
+#release-radar-bingo .tile-face {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backface-visibility: hidden;
+  font-weight: 800;
+  line-height: 1.06;
+  text-align: center;
+  text-transform: uppercase;
+  transition:
+    filter 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+#release-radar-bingo .tile-front {
+  background: rgba(0, 0, 0, 0.42);
+}
+
+#release-radar-bingo .tile-back {
+  background: var(--gradient);
+  color: #32323a;
+  transform: rotateY(180deg);
+}
+
+#release-radar-bingo .tile.in-completed-line .tile-back {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.38),
+    inset 0 0 18px rgba(255, 255, 255, 0.14);
+}
+
+#release-radar-bingo .tile.free .tile-back {
+  letter-spacing: 0.035em;
+}
+
+#release-radar-bingo .tile-label {
+  display: block;
+  max-width: 100%;
+  font-size: 12px;
+  hyphens: none;
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
+}
+
+#release-radar-bingo .tile.is-dealing {
+  animation: bingo-deal 440ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--deal-order) * 12ms);
+}
+
+#release-radar-bingo .tile.is-celebrating {
+  z-index: 4;
+  animation: bingo-winning-tile 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--win-order) * 80ms);
+}
+
+#release-radar-bingo .board-card.is-celebrating::before {
+  animation: bingo-card-glow 1.7s ease-out both;
+}
+
+#release-radar-bingo .shuffle-confirmation {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.64);
+}
+
+#release-radar-bingo .shuffle-confirmation[hidden] {
+  display: none;
+}
+
+#release-radar-bingo .confirmation-panel {
+  display: grid;
+  width: min(100%, 430px);
+  gap: 0.55rem;
+  padding: 1.2rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+#release-radar-bingo .confirmation-panel strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+
+#release-radar-bingo .confirmation-panel > span {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  opacity: 0.72;
+}
+
+#release-radar-bingo .confirmation-actions {
+  margin-top: 0.35rem;
+}
+
+#release-radar-bingo .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+#release-radar-bingo [hidden] {
+  display: none !important;
+}
+
+@keyframes bingo-deal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bingo-winning-tile {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  24% {
+    transform: translateY(-26px) scale(1.06);
+  }
+
+  52% {
+    transform: translateY(3px) scale(1.015);
+  }
+
+  70% {
+    transform: translateY(-3px) scale(1.025);
+  }
+}
+
+@keyframes bingo-card-glow {
+  0%,
+  100% {
+    border-color: var(--line);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+
+  22% {
+    border-color: rgba(73, 241, 250, 0.58);
+    box-shadow:
+      0 0 34px rgba(73, 241, 250, 0.34),
+      0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+
+  58% {
+    border-color: rgba(141, 100, 245, 0.58);
+    box-shadow:
+      0 0 38px rgba(141, 100, 245, 0.36),
+      0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@media (hover: hover) {
+  #release-radar-bingo:not(.keyboard-input) .button:not(:disabled):hover::after,
+  #release-radar-bingo:not(.keyboard-input) .tile:hover::after {
+    opacity: 1;
+  }
+
+  #release-radar-bingo .button:not(:disabled):hover {
+    filter: brightness(1.08) saturate(1.04);
+  }
+
+  #release-radar-bingo .tile:hover .tile-face {
+    filter: brightness(1.08);
+  }
+}
+
+#release-radar-bingo .button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 560px) {
+  #release-radar-bingo .board-card {
+    padding: 14px;
+  }
+
+  #release-radar-bingo .board {
+    gap: 4px;
+  }
+
+  #release-radar-bingo .tile,
+  #release-radar-bingo .tile-face {
+    border-radius: 8px;
+  }
+
+  #release-radar-bingo .tile::after {
+    border-radius: 10px;
+  }
+
+  #release-radar-bingo .tile-face {
+    padding: 4px;
+  }
+}
+
+@media (max-width: 360px) {
+  #release-radar-bingo {
+    padding-inline: 8px;
+  }
+
+  #release-radar-bingo h1 {
+    font-size: 1.7rem;
+  }
+
+  #release-radar-bingo .board-card {
+    padding: 10px;
+  }
+
+  #release-radar-bingo .actions,
+  #release-radar-bingo .confirmation-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #release-radar-bingo .actions .button,
+  #release-radar-bingo .confirmation-actions .button {
+    flex: 1 1 120px;
+    max-width: 128px;
+  }
+
+  #release-radar-bingo .shuffle-confirmation {
+    padding: 10px;
+  }
+
+  #release-radar-bingo .confirmation-panel {
+    padding: 0.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #release-radar-bingo *,
+  #release-radar-bingo *::before,
+  #release-radar-bingo *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  #release-radar-bingo .button,
+  #release-radar-bingo .tile-front {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  #release-radar-bingo .tile-back {
+    border: 2px solid Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  #release-radar-bingo .tile.in-completed-line .tile-back {
+    outline: 2px double HighlightText;
+    outline-offset: -5px;
+    box-shadow: none;
+  }
+
+  #release-radar-bingo .glass::before {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  #release-radar-bingo .button::after,
+  #release-radar-bingo .tile::after {
+    display: none;
+  }
+
+  #release-radar-bingo.keyboard-input .button:focus,
+  #release-radar-bingo.keyboard-input .tile:focus {
+    outline: 3px solid Highlight;
+    outline-offset: 3px;
+  }
+}
+/*$vite$:1*/

@@ -221,7 +221,7 @@ function createFace(className, text) {
 function createTile(text, index) {
 	const marked = state.marked.has(index);
 	const tile = createElement("button", {
-		className: "tile",
+		className: "tile dealing",
 		attributes: {
 			type: "button",
 			"data-index": String(index),
@@ -230,6 +230,9 @@ function createTile(text, index) {
 		}
 	});
 	tile.style.setProperty("--deal-delay", `${index * 12}ms`);
+	tile.addEventListener("animationend", (event) => {
+		if (event.animationName === "deal") tile.classList.remove("dealing");
+	}, { once: true });
 	const inner = createElement("span", { className: "inner" });
 	inner.append(createFace("front", text), createFace("back", text));
 	tile.append(inner);

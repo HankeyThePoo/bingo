@@ -182,7 +182,6 @@ html {
   cursor: pointer;
   perspective: 720px;
   touch-action: manipulation;
-  transform: translateZ(0);
 }
 
 #release-radar-bingo .tile::after {
@@ -274,10 +273,12 @@ html {
 
 #release-radar-bingo .tile.is-celebrating {
   z-index: 4;
+  animation: bingo-winning-tile 900ms both;
+  animation-delay: calc(var(--win-order) * 80ms);
 }
 
 #release-radar-bingo .tile.is-celebrating .tile-back::after {
-  animation: bingo-winning-tile 900ms ease-out both;
+  animation: bingo-winning-tile-glow 900ms ease-out both;
   animation-delay: calc(var(--win-order) * 80ms);
 }
 
@@ -354,6 +355,32 @@ html {
 }
 
 @keyframes bingo-winning-tile {
+  0% {
+    top: 0;
+    animation-timing-function: steps(26, end);
+  }
+
+  24% {
+    top: -26px;
+    animation-timing-function: steps(29, end);
+  }
+
+  52% {
+    top: 3px;
+    animation-timing-function: steps(6, end);
+  }
+
+  70% {
+    top: -3px;
+    animation-timing-function: steps(3, end);
+  }
+
+  100% {
+    top: 0;
+  }
+}
+
+@keyframes bingo-winning-tile-glow {
   0%,
   100% {
     opacity: 0;

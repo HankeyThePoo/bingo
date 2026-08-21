@@ -488,6 +488,7 @@ var BingoView = class {
 		this.requestLabelFit();
 	}
 	updateState(state, newlyCompletedLineIds) {
+		const completedPositions = positionsForLines(state.completedLines);
 		const winningPositions = winningOpportunityPositions(state.marked);
 		this.board.querySelectorAll(".tile").forEach((button, index) => {
 			const tile = this.tilesById.get(state.layout[index] ?? "");
@@ -495,6 +496,7 @@ var BingoView = class {
 			const marked = state.marked.has(index);
 			const winningOpportunity = winningPositions.has(index);
 			button.classList.toggle("marked", marked);
+			button.classList.toggle("in-completed-line", completedPositions.has(index));
 			button.classList.toggle("winning-opportunity", winningOpportunity);
 			button.setAttribute("aria-pressed", String(marked));
 			button.setAttribute("aria-label", index === 12 ? "It's Friday, free space" : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);

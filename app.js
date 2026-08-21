@@ -169,10 +169,7 @@ async function loadCatalog(url, request = fetch) {
 }
 //#endregion
 //#region src/snapshot.ts
-var SNAPSHOT_VERSION = 1;
 var MAX_MARKED_MASK = 2 ** 25 - 1;
-var MAX_PAYLOAD_LENGTH = 4096;
-var COMPACT_PREFIX = "R1";
 var COMPACT_LAYOUT_CELLS = 24;
 var COMPACT_MARK_BITS = BigInt(COMPACT_LAYOUT_CELLS);
 var COMPACT_MARK_MASK = (1n << COMPACT_MARK_BITS) - 1n;
@@ -181,18 +178,13 @@ function stateToSnapshot(state) {
 	let marked = 0;
 	for (const position of state.marked) marked += 2 ** position;
 	return {
-		version: SNAPSHOT_VERSION,
 		layout: [...state.layout],
 		marked
 	};
 }
 function parseSnapshot(value, catalog) {
-	if (!isRecord(value) || !hasExactKeys(value, [
-		"version",
-		"layout",
-		"marked"
-	])) return null;
-	if (value.version !== SNAPSHOT_VERSION || !Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > MAX_MARKED_MASK) return null;
+	if (!isRecord(value) || !hasExactKeys(value, ["layout", "marked"])) return null;
+	if (!Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > MAX_MARKED_MASK) return null;
 	const catalogIds = new Set(catalog.map(({ id }) => id));
 	const layout = [];
 	const seen = /* @__PURE__ */ new Set();
@@ -228,23 +220,10 @@ function encodeState(state, catalog) {
 		markedBit += 1n;
 	}
 	const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
-	return `${COMPACT_PREFIX}${encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << COMPACT_MARK_BITS | marked)}`;
+	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << COMPACT_MARK_BITS | marked);
 }
 function decodeState(payload, catalog) {
-	if (payload.startsWith(COMPACT_PREFIX)) return decodeCompactState(payload.slice(2), catalog);
-	return decodeLegacyState(payload, catalog);
-}
-function decodeLegacyState(payload, catalog) {
-	try {
-		if (payload.length === 0 || payload.length > MAX_PAYLOAD_LENGTH || !/^[A-Za-z0-9_-]+$/u.test(payload)) return null;
-		const base64 = payload.replaceAll("-", "+").replaceAll("_", "/");
-		const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-		const binary = atob(padded);
-		const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-		return parseSnapshot(JSON.parse(new TextDecoder().decode(bytes)), catalog);
-	} catch {
-		return null;
-	}
+	return decodeCompactState(payload, catalog);
 }
 function decodeCompactState(payload, catalog) {
 	try {
@@ -333,7 +312,7 @@ function hasExactKeys(value, expected) {
 }
 //#endregion
 //#region src/storage.ts
-var STORAGE_KEY = "release-radar-bingo:board:v1";
+var STORAGE_KEY = "release-radar-bingo:board";
 function browserStorage() {
 	try {
 		return window.localStorage;
@@ -391,7 +370,6 @@ var BingoView = class {
 	shareFeedbackTimer = 0;
 	shareFeedbackGeneration = 0;
 	freeLabelTimer = 0;
-	freeLabelGeneration = 0;
 	freeLabelTarget = "It's Friday";
 	lastBoardWidth = 0;
 	confirmationOpen = false;
@@ -471,7 +449,6 @@ var BingoView = class {
 	renderBoard(state, deal) {
 		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
-		this.freeLabelGeneration += 1;
 		this.freeLabelTarget = this.freeTileLabel(state);
 		const fragment = document.createDocumentFragment();
 		state.layout.forEach((id, index) => {
@@ -595,10 +572,8 @@ var BingoView = class {
 			this.requestLabelFit();
 			return;
 		}
-		const generation = ++this.freeLabelGeneration;
 		labels.forEach((label) => label.classList.add("fading"));
 		this.freeLabelTimer = window.setTimeout(() => {
-			if (generation !== this.freeLabelGeneration) return;
 			this.freeLabelTimer = 0;
 			labels.forEach((label) => {
 				label.textContent = text;
@@ -752,33 +727,34 @@ if (root && !root.dataset.bingoReady) {
 	window.addEventListener("hashchange", restoreSharedBoard);
 	bootstrap();
 	async function bootstrap() {
+		const moduleUrl = new URL(import.meta.url);
+		const catalogUrl = new URL("tiles.json", moduleUrl);
+		catalogUrl.search = moduleUrl.search;
 		try {
-			const moduleUrl = new URL(import.meta.url);
-			const catalogUrl = new URL("tiles.json", moduleUrl);
-			catalogUrl.search = moduleUrl.search;
 			catalog = await loadCatalog(catalogUrl);
-			const shared = readBoardHash(window.location.hash, catalog);
-			let announcement = "";
-			if (shared.kind === "valid") {
-				state = shared.state;
-				announcement = "A shared Release Radar board was loaded.";
-			} else {
-				const saved = storage.load(catalog);
-				state = saved ?? createState(generateBoard(catalog));
-				if (shared.kind === "invalid") {
-					announcement = saved ? "The shared board link was invalid. Your saved board was restored." : "The shared board link was invalid. A new board was created.";
-					clearInvalidBoardHash();
-				}
-			}
-			if (!storage.save(state)) {
-				persistenceFailureAnnounced = true;
-				announcement = [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
-			}
-			view.showReady(catalog, state);
-			if (announcement) view.announce(announcement);
 		} catch {
 			view.showFailure();
+			return;
 		}
+		const shared = readBoardHash(window.location.hash, catalog);
+		let announcement = "";
+		if (shared.kind === "valid") {
+			state = shared.state;
+			announcement = "A shared Release Radar board was loaded.";
+		} else {
+			const saved = storage.load(catalog);
+			state = saved ?? createState(generateBoard(catalog));
+			if (shared.kind === "invalid") {
+				announcement = saved ? "The shared board link was invalid. Your saved board was restored." : "The shared board link was invalid. A new board was created.";
+				clearInvalidBoardHash();
+			}
+		}
+		if (!storage.save(state)) {
+			persistenceFailureAnnounced = true;
+			announcement = [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
+		}
+		view.showReady(catalog, state);
+		if (announcement) view.announce(announcement);
 	}
 	function markTile(index) {
 		if (!state) return;
@@ -802,17 +778,7 @@ if (root && !root.dataset.bingoReady) {
 	}
 	function shuffleBoard() {
 		if (!state) return;
-		const previous = state.layout;
-		const previousIds = new Set(previous);
-		const canChangeTileSet = catalog.length - 1 > previous.length - 1;
-		let layout = generateBoard(catalog);
-		for (let attempt = 0; attempt < 12; attempt += 1) {
-			const layoutChanged = layout.some((id, index) => id !== previous[index]);
-			const tileSetChanged = layout.some((id) => !previousIds.has(id));
-			if (layoutChanged && (!canChangeTileSet || tileSetChanged)) break;
-			layout = generateBoard(catalog);
-		}
-		state = createState(layout);
+		state = createState(generateBoard(catalog));
 		view.renderBoard(state, true);
 		const saved = storage.save(state);
 		let announcement = "A new Release Radar board was shuffled.";

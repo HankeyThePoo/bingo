@@ -164,6 +164,11 @@ async function loadCatalog(url, request = fetch) {
 var SNAPSHOT_VERSION = 1;
 var MAX_MARKED_MASK = 2 ** 25 - 1;
 var MAX_PAYLOAD_LENGTH = 4096;
+var COMPACT_PREFIX = "R1";
+var COMPACT_LAYOUT_CELLS = 24;
+var COMPACT_MARK_BITS = BigInt(COMPACT_LAYOUT_CELLS);
+var COMPACT_MARK_MASK = (1n << COMPACT_MARK_BITS) - 1n;
+var CATALOG_FINGERPRINT_MODULUS = 4096;
 function stateToSnapshot(state) {
 	let marked = 0;
 	for (const position of state.marked) marked += 2 ** position;
@@ -195,13 +200,33 @@ function parseSnapshot(value, catalog) {
 	for (let index = 0; index < 25; index += 1) if (Math.floor(mask / 2 ** index) % 2 === 1) marked.add(index);
 	return restoreState(layout, marked);
 }
-function encodeState(state) {
-	const bytes = new TextEncoder().encode(JSON.stringify(stateToSnapshot(state)));
-	let binary = "";
-	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+function encodeState(state, catalog) {
+	const ordinaryIds = compactCatalogIds(catalog);
+	const available = [...ordinaryIds];
+	let layoutRank = 0n;
+	for (let index = 0; index < 25; index += 1) {
+		if (index === 12) continue;
+		const id = state.layout[index];
+		const digit = id ? available.indexOf(id) : -1;
+		if (digit < 0) throw new Error("The board cannot be encoded with this catalog.");
+		layoutRank = layoutRank * BigInt(available.length) + BigInt(digit);
+		available.splice(digit, 1);
+	}
+	let marked = 0n;
+	let markedBit = 0n;
+	for (let index = 0; index < 25; index += 1) {
+		if (index === 12) continue;
+		if (state.marked.has(index)) marked |= 1n << markedBit;
+		markedBit += 1n;
+	}
+	const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
+	return `${COMPACT_PREFIX}${encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << COMPACT_MARK_BITS | marked)}`;
 }
 function decodeState(payload, catalog) {
+	if (payload.startsWith(COMPACT_PREFIX)) return decodeCompactState(payload.slice(2), catalog);
+	return decodeLegacyState(payload, catalog);
+}
+function decodeLegacyState(payload, catalog) {
 	try {
 		if (payload.length === 0 || payload.length > MAX_PAYLOAD_LENGTH || !/^[A-Za-z0-9_-]+$/u.test(payload)) return null;
 		const base64 = payload.replaceAll("-", "+").replaceAll("_", "/");
@@ -212,6 +237,74 @@ function decodeState(payload, catalog) {
 	} catch {
 		return null;
 	}
+}
+function decodeCompactState(payload, catalog) {
+	try {
+		const ordinaryIds = compactCatalogIds(catalog);
+		const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
+		const packed = decodeBigInt(payload);
+		if (packed === null) return null;
+		const markedMask = packed & COMPACT_MARK_MASK;
+		const catalogAndLayout = packed >> COMPACT_MARK_BITS;
+		if (Number(catalogAndLayout / permutations) !== catalogFingerprint(ordinaryIds)) return null;
+		let layoutRank = catalogAndLayout % permutations;
+		const digits = new Array(COMPACT_LAYOUT_CELLS);
+		for (let index = COMPACT_LAYOUT_CELLS - 1; index >= 0; index -= 1) {
+			const radix = BigInt(ordinaryIds.length - index);
+			digits[index] = Number(layoutRank % radix);
+			layoutRank /= radix;
+		}
+		if (layoutRank !== 0n) return null;
+		const available = [...ordinaryIds];
+		const layout = digits.map((digit) => available.splice(digit, 1)[0]);
+		layout.splice(12, 0, FRIDAY_ID);
+		const marked = /* @__PURE__ */ new Set();
+		let markedBit = 0n;
+		for (let index = 0; index < 25; index += 1) {
+			if (index === 12) {
+				marked.add(index);
+				continue;
+			}
+			if ((markedMask & 1n << markedBit) !== 0n) marked.add(index);
+			markedBit += 1n;
+		}
+		return restoreState(layout, marked);
+	} catch {
+		return null;
+	}
+}
+function compactCatalogIds(catalog) {
+	const ids = catalog.filter(({ id }) => id !== FRIDAY_ID).map(({ id }) => id).sort();
+	if (ids.length < COMPACT_LAYOUT_CELLS || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
+	return ids;
+}
+function permutationCount(size, count) {
+	let result = 1n;
+	for (let index = 0; index < count; index += 1) result *= BigInt(size - index);
+	return result;
+}
+function catalogFingerprint(ids) {
+	let hash = 2166136261;
+	for (const character of ids.join("\0")) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+	return (hash >>> 0) % CATALOG_FINGERPRINT_MODULUS;
+}
+function encodeBigInt(value) {
+	const bytes = [];
+	do {
+		bytes.unshift(Number(value & 255n));
+		value >>= 8n;
+	} while (value > 0n);
+	let binary = "";
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+function decodeBigInt(payload) {
+	if (payload.length === 0 || payload.length > 64 || !/^[A-Za-z0-9_-]+$/u.test(payload)) return null;
+	const base64 = payload.replaceAll("-", "+").replaceAll("_", "/");
+	const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+	let value = 0n;
+	for (const character of atob(padded)) value = value << 8n | BigInt(character.charCodeAt(0));
+	return value;
 }
 function readBoardHash(hash, catalog) {
 	const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
@@ -272,6 +365,7 @@ var BingoView = class {
 	actions;
 	shuffleButton;
 	shareButton;
+	shareLabel;
 	boardCard;
 	board;
 	boardStatus;
@@ -282,6 +376,8 @@ var BingoView = class {
 	tilesById = /* @__PURE__ */ new Map();
 	announcementFrame = 0;
 	fitFrame = 0;
+	shareFeedbackTimer = 0;
+	shareFeedbackGeneration = 0;
 	lastBoardWidth = 0;
 	confirmationOpen = false;
 	constructor(root) {
@@ -290,6 +386,7 @@ var BingoView = class {
 		this.actions = this.required(".actions");
 		this.shuffleButton = this.required(".shuffle-button");
 		this.shareButton = this.required(".share-button");
+		this.shareLabel = this.required(".share-label");
 		this.boardCard = this.required(".board-card");
 		this.board = this.required(".board");
 		this.boardStatus = this.required(".board-status");
@@ -413,9 +510,15 @@ var BingoView = class {
 		this.board.inert = false;
 		if (returnFocus) this.shuffleButton.focus({ preventScroll: true });
 	}
-	setShareFeedback(label, busy) {
-		this.shareButton.textContent = label;
-		this.shareButton.disabled = busy;
+	showShareCopied() {
+		if (this.shareFeedbackTimer) window.clearTimeout(this.shareFeedbackTimer);
+		const generation = ++this.shareFeedbackGeneration;
+		this.shareLabel.classList.remove("fading");
+		this.shareLabel.textContent = "COPIED";
+		this.shareFeedbackTimer = window.setTimeout(() => {
+			this.shareFeedbackTimer = 0;
+			this.swapShareLabel("SHARE", generation);
+		}, 680);
 	}
 	announce(message) {
 		cancelAnimationFrame(this.announcementFrame);
@@ -435,6 +538,20 @@ var BingoView = class {
 		text.textContent = label;
 		face.append(text);
 		return face;
+	}
+	swapShareLabel(text, generation) {
+		if (this.shareLabel.textContent === text || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			this.shareLabel.textContent = text;
+			return;
+		}
+		this.shareLabel.classList.remove("fading");
+		this.shareLabel.offsetWidth;
+		this.shareLabel.classList.add("fading");
+		window.setTimeout(() => {
+			if (generation !== this.shareFeedbackGeneration) return;
+			this.shareLabel.textContent = text;
+			this.shareLabel.classList.remove("fading");
+		}, 200);
 	}
 	celebrate(lineIds) {
 		const winningPositions = [...positionsForLines(lineIds)].sort((left, right) => left - right);
@@ -516,7 +633,7 @@ function markup() {
       <h1>RELEASE RADAR&#10022;</h1>
       <div class="actions" aria-label="Board actions">
         <button class="button shuffle-button" type="button" disabled>SHUFFLE</button>
-        <button class="button share-button" type="button" disabled>SHARE</button>
+        <button class="button share-button" type="button" disabled><span class="share-label">SHARE</span></button>
       </div>
       <section class="board-card glass" aria-busy="true">
         <p class="board-status" role="status">LOADING TILES&hellip;</p>
@@ -545,7 +662,6 @@ if (root && !root.dataset.bingoReady) {
 	const storage = new BoardStorage();
 	let catalog = [];
 	let state = null;
-	let sharing = false;
 	let persistenceFailureAnnounced = false;
 	view.bind({
 		shuffle: () => {
@@ -631,18 +747,10 @@ if (root && !root.dataset.bingoReady) {
 		view.announce(announcement);
 	}
 	async function shareBoard() {
-		if (!state || sharing) return;
-		sharing = true;
-		view.setShareFeedback("SHARE", true);
-		const url = new URL(window.location.href);
-		url.hash = `board=${encodeState(state)}`;
-		const copied = await copyText(url.href);
-		view.setShareFeedback(copied ? "COPIED" : "COPY FAILED", true);
-		view.announce(copied ? "A link to this board was copied." : "The board link could not be copied.");
-		window.setTimeout(() => {
-			sharing = false;
-			view.setShareFeedback("SHARE", false);
-		}, 1400);
+		if (!state) return;
+		const copied = await copyText(encodeState(state, catalog));
+		if (copied) view.showShareCopied();
+		view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
 	}
 	function restoreSharedBoard() {
 		if (!state || catalog.length === 0) return;

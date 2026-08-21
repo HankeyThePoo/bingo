@@ -234,29 +234,11 @@ html {
   transform: rotateY(180deg);
 }
 
-#release-radar-bingo .tile-back::after {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    circle at 50% 42%,
-    rgba(255, 255, 255, 0.64),
-    rgba(255, 255, 255, 0.18) 44%,
-    rgba(255, 255, 255, 0) 72%
-  );
-  opacity: 0;
-  pointer-events: none;
-}
-
 #release-radar-bingo .tile.free .tile-back {
   letter-spacing: 0.035em;
 }
 
 #release-radar-bingo .tile-label {
-  position: relative;
-  z-index: 1;
   display: block;
   max-width: 100%;
   font-size: 12px;
@@ -273,12 +255,7 @@ html {
 
 #release-radar-bingo .tile.is-celebrating {
   z-index: 4;
-  animation: bingo-winning-tile 900ms both;
-  animation-delay: calc(var(--win-order) * 80ms);
-}
-
-#release-radar-bingo .tile.is-celebrating .tile-back::after {
-  animation: bingo-winning-tile-glow 900ms ease-out both;
+  animation: bingo-winning-tile 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--win-order) * 80ms);
 }
 
@@ -355,47 +332,21 @@ html {
 }
 
 @keyframes bingo-winning-tile {
-  0% {
-    top: 0;
-    animation-timing-function: steps(26, end);
+  0%,
+  100% {
+    translate: 0 0;
   }
 
   24% {
-    top: -26px;
-    animation-timing-function: steps(29, end);
+    translate: 0 -26px;
   }
 
   52% {
-    top: 3px;
-    animation-timing-function: steps(6, end);
+    translate: 0 3px;
   }
 
   70% {
-    top: -3px;
-    animation-timing-function: steps(3, end);
-  }
-
-  100% {
-    top: 0;
-  }
-}
-
-@keyframes bingo-winning-tile-glow {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  24% {
-    opacity: 0.78;
-  }
-
-  52% {
-    opacity: 0.16;
-  }
-
-  72% {
-    opacity: 0.46;
+    translate: 0 -3px;
   }
 }
 

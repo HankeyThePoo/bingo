@@ -605,11 +605,11 @@ var BingoView = class {
 			const availableWidth = face.clientWidth - (Number.parseFloat(styles.paddingLeft) || 0) - (Number.parseFloat(styles.paddingRight) || 0);
 			const availableHeight = face.clientHeight - (Number.parseFloat(styles.paddingTop) || 0) - (Number.parseFloat(styles.paddingBottom) || 0);
 			let low = 6;
-			let high = Math.min(22, Math.max(11, availableWidth * .25));
+			let high = Math.min(availableWidth, availableHeight);
 			labels.forEach((label) => {
 				label.style.width = `${availableWidth}px`;
 			});
-			for (let attempt = 0; attempt < 8; attempt += 1) {
+			for (let attempt = 0; attempt < 10; attempt += 1) {
 				const candidate = (low + high) / 2;
 				measure.style.fontSize = `${candidate}px`;
 				if (measure.scrollWidth <= availableWidth + .5 && measure.scrollHeight <= availableHeight + .5) low = candidate;

@@ -263,6 +263,15 @@ html {
   letter-spacing: 0.035em;
 }
 
+#release-radar-bingo .tile.free .tile-label {
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+#release-radar-bingo .tile.free .tile-label.fading {
+  opacity: 0;
+}
+
 #release-radar-bingo .tile-label {
   display: block;
   max-width: 100%;
@@ -363,7 +372,7 @@ html {
   }
 
   24% {
-    translate: 0 -26px;
+    translate: 0 var(--celebration-lift, -26px);
   }
 
   52% {
@@ -396,14 +405,14 @@ html {
   22% {
     border-color: rgba(73, 241, 250, 0.58);
     box-shadow:
-      0 0 34px rgba(73, 241, 250, 0.34),
+      0 0 var(--celebration-cyan-glow, 34px) rgba(73, 241, 250, 0.34),
       0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
   58% {
     border-color: rgba(141, 100, 245, 0.58);
     box-shadow:
-      0 0 38px rgba(141, 100, 245, 0.36),
+      0 0 var(--celebration-purple-glow, 38px) rgba(141, 100, 245, 0.36),
       0 6px 18px rgba(0, 0, 0, 0.3);
   }
 }

@@ -706,20 +706,22 @@ function markup() {
         <button class="button shuffle-button" type="button" disabled>SHUFFLE</button>
         <button class="button share-button" type="button" disabled><span class="share-label">SHARE</span></button>
       </div>
-      <section class="board-card glass" aria-busy="true">
-        <p class="board-status" role="status">LOADING TILES&hellip;</p>
-        <div class="board" role="group" aria-label="Release Radar bingo board" hidden></div>
-        <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" aria-hidden="true" hidden>
-          <div class="confirmation-panel glass">
-            <strong id="bingo-shuffle-title">SHUFFLE YOUR BOARD?</strong>
-            <span id="bingo-shuffle-warning">YOUR CURRENT MARKS WILL BE LOST.</span>
-            <div class="confirmation-actions">
-              <button class="button confirmation-cancel" type="button">CANCEL</button>
-              <button class="button confirmation-confirm" type="button">SHUFFLE</button>
+      <div class="board-stage">
+        <section class="board-card glass" aria-busy="true">
+          <p class="board-status" role="status">LOADING TILES&hellip;</p>
+          <div class="board" role="group" aria-label="Release Radar bingo board" hidden></div>
+          <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" aria-hidden="true" hidden>
+            <div class="confirmation-panel glass">
+              <strong id="bingo-shuffle-title">SHUFFLE YOUR BOARD?</strong>
+              <span id="bingo-shuffle-warning">YOUR CURRENT MARKS WILL BE LOST.</span>
+              <div class="confirmation-actions">
+                <button class="button confirmation-cancel" type="button">CANCEL</button>
+                <button class="button confirmation-confirm" type="button">SHUFFLE</button>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
       <p class="sr-only live-region" aria-live="polite" aria-atomic="true"></p>
     </main>
   `;

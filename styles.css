@@ -25,10 +25,8 @@
 
 #bingo h1 {
   margin: 1rem 0 2rem;
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.1;
   text-align: center;
+  font-size: 2rem;
 }
 
 #bingo button {
@@ -100,7 +98,9 @@
   text-transform: uppercase;
   transition:
     filter 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 #bingo .glass {
@@ -112,12 +112,13 @@
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
   border: 1px solid var(--line);
   border-radius: inherit;
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 #bingo .glass > * {
@@ -195,9 +196,8 @@
 }
 
 #bingo .back {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-  color: #fff;
+  background: var(--gradient);
+  color: #32323a;
   transform: rotateY(180deg);
 }
 
@@ -245,34 +245,17 @@
 }
 
 @media (hover: hover) {
-  #bingo .button:not(:disabled):hover {
-    filter: brightness(1.08);
-    transform: translateY(-1px);
-  }
-
+  #bingo:not(.keyboard-input) .button:not(:disabled):hover::after,
   #bingo:not(.keyboard-input) .tile:hover::after {
     opacity: 1;
+  }
+
+  #bingo .button:not(:disabled):hover {
+    filter: brightness(1.08) saturate(1.04);
   }
 }
 
 @media (max-width: 560px) {
-  #bingo {
-    padding: 0.75rem 8px 2rem;
-  }
-
-  #bingo h1 {
-    margin: 0.8rem 0 1.4rem;
-    font-size: clamp(1.45rem, 7vw, 2rem);
-  }
-
-  #bingo .actions {
-    margin-bottom: 1rem;
-  }
-
-  #bingo .card {
-    padding: 8px;
-  }
-
   #bingo .board {
     gap: 4px;
   }
@@ -283,6 +266,25 @@
 
   #bingo .face {
     padding: 5px;
+  }
+}
+
+@media (max-width: 360px) {
+  #bingo {
+    padding-inline: 8px;
+  }
+
+  #bingo .card {
+    padding: 12px;
+  }
+
+  #bingo .actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  #bingo .actions .button {
+    flex: 1 1 120px;
   }
 }
 

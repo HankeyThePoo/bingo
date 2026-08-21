@@ -132,6 +132,14 @@ function toggleTile(state, index) {
 function completedLineIds(marked) {
 	return new Set(BINGO_LINES.filter(({ positions }) => positions.every((position) => marked.has(position))).map(({ id }) => id));
 }
+function winningOpportunityPositions(marked) {
+	const positions = /* @__PURE__ */ new Set();
+	for (const line of BINGO_LINES) {
+		const missing = line.positions.filter((position) => !marked.has(position));
+		if (missing.length === 1) positions.add(missing[0]);
+	}
+	return positions;
+}
 function positionsForLines(lineIds) {
 	const requested = new Set(lineIds);
 	const positions = /* @__PURE__ */ new Set();
@@ -480,15 +488,16 @@ var BingoView = class {
 		this.requestLabelFit();
 	}
 	updateState(state, newlyCompletedLineIds) {
-		const completedPositions = positionsForLines(state.completedLines);
+		const winningPositions = winningOpportunityPositions(state.marked);
 		this.board.querySelectorAll(".tile").forEach((button, index) => {
 			const tile = this.tilesById.get(state.layout[index] ?? "");
 			if (!tile) return;
 			const marked = state.marked.has(index);
+			const winningOpportunity = winningPositions.has(index);
 			button.classList.toggle("marked", marked);
-			button.classList.toggle("in-completed-line", completedPositions.has(index));
+			button.classList.toggle("winning-opportunity", winningOpportunity);
 			button.setAttribute("aria-pressed", String(marked));
-			button.setAttribute("aria-label", index === 12 ? "It's Friday, free space" : `${tile.label}, ${marked ? "marked" : "not marked"}`);
+			button.setAttribute("aria-label", index === 12 ? "It's Friday, free space" : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
 		});
 		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds);
 	}

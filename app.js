@@ -386,6 +386,9 @@ var BingoView = class {
 	fitFrame = 0;
 	shareFeedbackTimer = 0;
 	shareFeedbackGeneration = 0;
+	freeLabelTimer = 0;
+	freeLabelGeneration = 0;
+	freeLabelTarget = "It's Friday";
 	lastBoardWidth = 0;
 	confirmationOpen = false;
 	constructor(root) {
@@ -462,10 +465,15 @@ var BingoView = class {
 		this.announce("The tile catalog could not be loaded.");
 	}
 	renderBoard(state, deal) {
+		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
+		this.freeLabelTimer = 0;
+		this.freeLabelGeneration += 1;
+		this.freeLabelTarget = this.freeTileLabel(state);
 		const fragment = document.createDocumentFragment();
 		state.layout.forEach((id, index) => {
 			const tile = this.tilesById.get(id);
 			if (!tile) return;
+			const label = index === 12 ? this.freeLabelTarget : tile.label;
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = "tile";
@@ -479,7 +487,7 @@ var BingoView = class {
 			const inner = document.createElement("span");
 			inner.className = "tile-inner";
 			inner.setAttribute("aria-hidden", "true");
-			inner.append(this.createFace("tile-face tile-front", tile.label), this.createFace("tile-face tile-back", tile.label));
+			inner.append(this.createFace("tile-face tile-front", label), this.createFace("tile-face tile-back", label));
 			button.append(inner);
 			fragment.append(button);
 		});
@@ -499,9 +507,10 @@ var BingoView = class {
 			button.classList.toggle("in-completed-line", completedPositions.has(index));
 			button.classList.toggle("winning-opportunity", winningOpportunity);
 			button.setAttribute("aria-pressed", String(marked));
-			button.setAttribute("aria-label", index === 12 ? "It's Friday, free space" : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
+			button.setAttribute("aria-label", index === 12 ? this.freeTileAriaLabel(state) : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
 		});
-		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds);
+		this.updateFreeTileLabel(state);
+		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds, state.completedLines.size);
 	}
 	showShuffleConfirmation() {
 		if (this.confirmationOpen) return;
@@ -564,8 +573,48 @@ var BingoView = class {
 			this.shareLabel.classList.remove("fading");
 		}, 200);
 	}
-	celebrate(lineIds) {
+	updateFreeTileLabel(state) {
+		const text = this.freeTileLabel(state);
+		if (text === this.freeLabelTarget) return;
+		this.freeLabelTarget = text;
+		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
+		this.freeLabelTimer = 0;
+		const labels = this.board.querySelectorAll(".tile.free .tile-label");
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			labels.forEach((label) => {
+				label.textContent = text;
+				label.classList.remove("fading");
+			});
+			this.requestLabelFit();
+			return;
+		}
+		const generation = ++this.freeLabelGeneration;
+		labels.forEach((label) => label.classList.add("fading"));
+		this.freeLabelTimer = window.setTimeout(() => {
+			if (generation !== this.freeLabelGeneration) return;
+			this.freeLabelTimer = 0;
+			labels.forEach((label) => {
+				label.textContent = text;
+				label.classList.remove("fading");
+			});
+			this.requestLabelFit();
+		}, 180);
+	}
+	freeTileLabel(state) {
+		if (state.marked.size === 25) return "BLACKOUT";
+		return state.completedLines.size > 0 ? `BINGO ✦ ${state.completedLines.size}` : "It's Friday";
+	}
+	freeTileAriaLabel(state) {
+		if (state.marked.size === 25) return "Blackout, full board, free space";
+		const lines = state.completedLines.size;
+		return lines > 0 ? `Bingo, ${lines} completed ${lines === 1 ? "line" : "lines"}, free space` : "It's Friday, free space";
+	}
+	celebrate(lineIds, completedLineCount) {
 		const winningPositions = [...positionsForLines(lineIds)].sort((left, right) => left - right);
+		const boost = Math.max(0, completedLineCount - 1) * 2;
+		this.boardCard.style.setProperty("--celebration-lift", `${-(26 + boost)}px`);
+		this.boardCard.style.setProperty("--celebration-cyan-glow", `${34 + boost}px`);
+		this.boardCard.style.setProperty("--celebration-purple-glow", `${38 + boost}px`);
 		this.boardCard.classList.remove("is-celebrating");
 		this.board.querySelectorAll(".tile.is-celebrating").forEach((tile) => {
 			tile.classList.remove("is-celebrating");

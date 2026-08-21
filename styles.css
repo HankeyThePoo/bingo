@@ -361,7 +361,7 @@ html {
 @keyframes bingo-opportunity-pulse {
   0%,
   100% {
-    opacity: 0.08;
+    opacity: 0.2;
   }
 
   50% {

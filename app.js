@@ -368,6 +368,10 @@ var BoardStorage = class {
 };
 //#endregion
 //#region src/view.ts
+var BOARD_CENTER = Math.floor(5 / 2);
+var BLACKOUT_WAVE_POSITIONS = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
+	return Math.abs(Math.floor(left / 5) - BOARD_CENTER) + Math.abs(left % 5 - BOARD_CENTER) - (Math.abs(Math.floor(right / 5) - BOARD_CENTER) + Math.abs(right % 5 - BOARD_CENTER)) || left - right;
+});
 var BingoView = class {
 	root;
 	actions;
@@ -510,7 +514,7 @@ var BingoView = class {
 			button.setAttribute("aria-label", index === 12 ? this.freeTileAriaLabel(state) : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
 		});
 		this.updateFreeTileLabel(state);
-		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds, state.completedLines.size);
+		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds, state);
 	}
 	showShuffleConfirmation() {
 		if (this.confirmationOpen) return;
@@ -609,12 +613,19 @@ var BingoView = class {
 		const lines = state.completedLines.size;
 		return lines > 0 ? `Bingo, ${lines} completed ${lines === 1 ? "line" : "lines"}, free space` : "It's Friday, free space";
 	}
-	celebrate(lineIds, completedLineCount) {
-		const winningPositions = [...positionsForLines(lineIds)].sort((left, right) => left - right);
-		const boost = Math.max(0, completedLineCount - 1) * 2;
-		this.boardCard.style.setProperty("--celebration-lift", `${-(26 + boost)}px`);
-		this.boardCard.style.setProperty("--celebration-cyan-glow", `${34 + boost}px`);
-		this.boardCard.style.setProperty("--celebration-purple-glow", `${38 + boost}px`);
+	celebrate(lineIds, state) {
+		const blackout = state.marked.size === 25;
+		const winningPositions = blackout ? BLACKOUT_WAVE_POSITIONS : [...positionsForLines(lineIds)].sort((left, right) => left - right);
+		const progress = Math.max(0, state.completedLines.size - 1) / (BINGO_LINES.length - 1);
+		const intensity = Math.sqrt(progress);
+		const scaled = (start, end) => Math.round(start + (end - start) * intensity);
+		this.boardCard.style.setProperty("--celebration-lift", `${-scaled(26, 60)}px`);
+		this.boardCard.style.setProperty("--celebration-cyan-glow", `${scaled(34, 100)}px`);
+		this.boardCard.style.setProperty("--celebration-purple-glow", `${scaled(38, 104)}px`);
+		this.boardCard.style.setProperty("--celebration-cyan-color", `rgba(73, 241, 250, ${(.34 + intensity * .24).toFixed(2)})`);
+		this.boardCard.style.setProperty("--celebration-purple-color", `rgba(141, 100, 245, ${(.36 + intensity * .24).toFixed(2)})`);
+		this.boardCard.style.setProperty("--celebration-tile-duration", `${scaled(900, 1350)}ms`);
+		this.boardCard.style.setProperty("--celebration-card-duration", `${scaled(1700, 2600)}ms`);
 		this.boardCard.classList.remove("is-celebrating");
 		this.board.querySelectorAll(".tile.is-celebrating").forEach((tile) => {
 			tile.classList.remove("is-celebrating");
@@ -623,7 +634,7 @@ var BingoView = class {
 		winningPositions.forEach((position, order) => {
 			const tile = this.board.querySelector(`[data-index="${position}"]`);
 			if (!tile) return;
-			tile.style.setProperty("--win-order", String(order));
+			tile.style.setProperty("--win-delay", `${order * (blackout ? 35 : 80)}ms`);
 			tile.classList.add("is-celebrating");
 		});
 		this.boardCard.classList.add("is-celebrating");

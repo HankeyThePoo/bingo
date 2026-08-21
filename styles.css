@@ -289,12 +289,12 @@ html {
 
 #release-radar-bingo .tile.is-celebrating {
   z-index: 4;
-  animation: bingo-winning-tile 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--win-order) * 80ms);
+  animation: bingo-winning-tile var(--celebration-tile-duration, 900ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--win-delay, 0ms);
 }
 
 #release-radar-bingo .board-card.is-celebrating::before {
-  animation: bingo-card-glow 1.7s ease-out both;
+  animation: bingo-card-glow var(--celebration-card-duration, 1.7s) ease-out both;
 }
 
 #release-radar-bingo .shuffle-confirmation {
@@ -405,14 +405,14 @@ html {
   22% {
     border-color: rgba(73, 241, 250, 0.58);
     box-shadow:
-      0 0 var(--celebration-cyan-glow, 34px) rgba(73, 241, 250, 0.34),
+      0 0 var(--celebration-cyan-glow, 34px) var(--celebration-cyan-color, rgba(73, 241, 250, 0.34)),
       0 6px 18px rgba(0, 0, 0, 0.3);
   }
 
   58% {
     border-color: rgba(141, 100, 245, 0.58);
     box-shadow:
-      0 0 var(--celebration-purple-glow, 38px) rgba(141, 100, 245, 0.36),
+      0 0 var(--celebration-purple-glow, 38px) var(--celebration-purple-color, rgba(141, 100, 245, 0.36)),
       0 6px 18px rgba(0, 0, 0, 0.3);
   }
 }

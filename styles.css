@@ -12,12 +12,6 @@ body {
 
 #release-radar-bingo {
   --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
-  --gradient-background-soft: linear-gradient(
-    135deg,
-    rgba(73, 241, 250, 0.12),
-    rgba(123, 176, 247, 0.12) 50%,
-    rgba(141, 100, 245, 0.12)
-  );
   --line: rgba(255, 255, 255, 0.1);
   --duration-rewind: 200ms;
   height: 100dvh;
@@ -27,11 +21,6 @@ body {
   box-sizing: border-box;
   color: white;
   font-family: "Monument Extended", Inter, system-ui, sans-serif;
-  scrollbar-width: none;
-}
-
-#release-radar-bingo::-webkit-scrollbar {
-  display: none;
 }
 
 #release-radar-bingo *,
@@ -110,8 +99,7 @@ body {
   transition:
     filter 0.18s ease,
     opacity 0.18s ease,
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+    transform 0.18s ease;
 }
 
 #release-radar-bingo .share-label {
@@ -250,9 +238,7 @@ body {
   font-weight: 800;
   line-height: 1.06;
   text-align: center;
-  transition:
-    filter 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: filter 0.18s ease;
 }
 
 #release-radar-bingo .tile-front {
@@ -522,7 +508,6 @@ body {
   #release-radar-bingo *,
   #release-radar-bingo *::before,
   #release-radar-bingo *::after {
-    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;

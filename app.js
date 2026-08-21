@@ -554,6 +554,9 @@ var BingoView = class {
 			this.liveRegion.textContent = message;
 		});
 	}
+	announceFreeTile(state) {
+		this.announce(`${this.freeTileAriaLabel(state)}.`);
+	}
 	createFace(className, label) {
 		const face = document.createElement("span");
 		face.className = className;
@@ -780,7 +783,7 @@ if (root && !root.dataset.bingoReady) {
 	function markTile(index) {
 		if (!state) return;
 		if (index === 12) {
-			view.announce("It's Friday is the free space.");
+			view.announceFreeTile(state);
 			return;
 		}
 		const tile = catalog.find(({ id }) => id === state?.layout[index]);

@@ -1,5 +1,13 @@
 html {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   scrollbar-gutter: stable;
+}
+
+body {
+  height: 100%;
+  overflow: clip;
 }
 
 #release-radar-bingo {
@@ -12,8 +20,11 @@ html {
   );
   --line: rgba(255, 255, 255, 0.1);
   --duration-rewind: 200ms;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   padding: 1rem 12px 3rem;
+  overflow: clip;
+  box-sizing: border-box;
   color: white;
   font-family: "Monument Extended", Inter, system-ui, sans-serif;
   scrollbar-width: none;
@@ -30,6 +41,10 @@ html {
 }
 
 #release-radar-bingo .bingo-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   max-width: 980px;
   margin: auto;
 }
@@ -63,8 +78,17 @@ html {
 }
 
 #release-radar-bingo .actions {
+  flex: none;
   max-width: 720px;
   margin: -1rem auto 1rem;
+}
+
+#release-radar-bingo .board-stage {
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  place-items: start center;
+  container-type: size;
 }
 
 #release-radar-bingo .button {
@@ -146,9 +170,9 @@ html {
 }
 
 #release-radar-bingo .board-card {
-  width: min(100%, 720px);
+  width: min(100cqw, 100cqh, 720px);
   padding: 16px;
-  margin-inline: auto;
+  aspect-ratio: 1;
 }
 
 #release-radar-bingo .board-status {

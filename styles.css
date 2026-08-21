@@ -242,6 +242,23 @@ html {
   transform: rotateY(180deg);
 }
 
+#release-radar-bingo .tile-back::after {
+  content: "✦";
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  color: rgba(50, 50, 58, 0.72);
+  font-size: clamp(9px, 1.4vw, 13px);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+#release-radar-bingo .tile.in-completed-line .tile-back::after {
+  opacity: 1;
+}
+
 #release-radar-bingo .tile.free .tile-back {
   letter-spacing: 0.035em;
 }

@@ -602,7 +602,7 @@ var BingoView = class {
 	}
 	freeTileLabel(state) {
 		if (state.marked.size === 25) return "BLACKOUT";
-		return state.completedLines.size > 0 ? `BINGO ✦ ${state.completedLines.size}` : "It's Friday";
+		return state.completedLines.size > 0 ? "BINGO" : "It's Friday";
 	}
 	freeTileAriaLabel(state) {
 		if (state.marked.size === 25) return "Blackout, full board, free space";

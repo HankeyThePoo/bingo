@@ -1,3 +1,7 @@
+html {
+  scrollbar-gutter: stable;
+}
+
 #release-radar-bingo {
   --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
   --gradient-background-soft: linear-gradient(
@@ -7,6 +11,7 @@
     rgba(141, 100, 245, 0.12)
   );
   --line: rgba(255, 255, 255, 0.1);
+  --duration-rewind: 200ms;
   min-height: 100vh;
   padding: 1rem 12px 3rem;
   color: white;
@@ -25,16 +30,13 @@
 }
 
 #release-radar-bingo .bingo-shell {
-  width: min(100%, 720px);
+  max-width: 980px;
   margin: auto;
 }
 
 #release-radar-bingo h1 {
   margin: 1rem 0 2rem;
-  color: white;
   font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.05;
   text-align: center;
 }
 
@@ -61,7 +63,8 @@
 }
 
 #release-radar-bingo .actions {
-  margin-bottom: 12px;
+  max-width: 720px;
+  margin: -1rem auto 1rem;
 }
 
 #release-radar-bingo .button {
@@ -85,6 +88,15 @@
     opacity 0.18s ease,
     transform 0.18s ease,
     box-shadow 0.18s ease;
+}
+
+#release-radar-bingo .share-label {
+  opacity: 1;
+  transition: opacity var(--duration-rewind) ease;
+}
+
+#release-radar-bingo .share-label.fading {
+  opacity: 0;
 }
 
 #release-radar-bingo .button::after,
@@ -134,7 +146,9 @@
 }
 
 #release-radar-bingo .board-card {
+  width: min(100%, 720px);
   padding: 16px;
+  margin-inline: auto;
 }
 
 #release-radar-bingo .board-status {
@@ -199,7 +213,6 @@
   min-height: 0;
   padding: 8px;
   overflow: hidden;
-  border: 1px solid var(--line);
   border-radius: 10px;
   backface-visibility: hidden;
   font-weight: 800;
@@ -212,6 +225,7 @@
 }
 
 #release-radar-bingo .tile-front {
+  border: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.42);
 }
 
@@ -219,12 +233,6 @@
   background: var(--gradient);
   color: #32323a;
   transform: rotateY(180deg);
-}
-
-#release-radar-bingo .tile.in-completed-line .tile-back {
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.38),
-    inset 0 0 18px rgba(255, 255, 255, 0.14);
 }
 
 #release-radar-bingo .tile.free .tile-back {
@@ -412,10 +420,6 @@
     padding-inline: 8px;
   }
 
-  #release-radar-bingo h1 {
-    font-size: 1.7rem;
-  }
-
   #release-radar-bingo .board-card {
     padding: 10px;
   }
@@ -465,12 +469,6 @@
     border: 2px solid Highlight;
     background: Highlight;
     color: HighlightText;
-  }
-
-  #release-radar-bingo .tile.in-completed-line .tile-back {
-    outline: 2px double HighlightText;
-    outline-offset: -5px;
-    box-shadow: none;
   }
 
   #release-radar-bingo .glass::before {

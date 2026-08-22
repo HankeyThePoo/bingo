@@ -1,4 +1,4 @@
-a//#region \0vite/modulepreload-polyfill.js
+//#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;

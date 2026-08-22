@@ -635,6 +635,7 @@ body {
 }
 
 #release-radar-bingo.gm-mode .gm-panel-heading em,
+#release-radar-bingo.gm-mode .gm-spotify-status,
 #release-radar-bingo.gm-mode .gm-history-title em {
   padding: 6px 8px;
   border: 1px solid var(--line);
@@ -642,8 +643,27 @@ body {
   color: rgba(255, 255, 255, 0.5);
   font-size: 0.52rem;
   font-style: normal;
+  font-family: inherit;
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-status {
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-status[data-state="connected"] {
+  border-color: rgba(73, 241, 250, 0.34);
+  background: rgba(73, 241, 250, 0.08);
+  color: #7eeef5;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-status[data-state="waiting"],
+#release-radar-bingo.gm-mode .gm-spotify-status[data-state="connecting"] {
+  border-color: rgba(123, 176, 247, 0.32);
+  color: rgba(170, 204, 255, 0.8);
 }
 
 #release-radar-bingo.gm-mode .gm-artwork-placeholder {
@@ -660,7 +680,14 @@ body {
     rgba(0, 0, 0, 0.3);
 }
 
-#release-radar-bingo.gm-mode .gm-artwork-placeholder span {
+#release-radar-bingo.gm-mode .gm-artwork {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+#release-radar-bingo.gm-mode .gm-artwork-fallback {
   color: rgba(255, 255, 255, 0.3);
   font-size: 3rem;
 }
@@ -673,15 +700,44 @@ body {
   text-align: center;
 }
 
-#release-radar-bingo.gm-mode .gm-track-placeholder strong {
-  font-size: 0.82rem;
+#release-radar-bingo.gm-mode .gm-track-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
-#release-radar-bingo.gm-mode .gm-track-placeholder span,
+#release-radar-bingo.gm-mode .gm-track-title {
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+#release-radar-bingo.gm-mode .gm-track-title[href]:hover {
+  text-decoration: underline;
+}
+
+#release-radar-bingo.gm-mode .gm-explicit-badge {
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.45rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+#release-radar-bingo.gm-mode .gm-track-artists,
+#release-radar-bingo.gm-mode .gm-track-album,
 #release-radar-bingo.gm-mode .gm-history-empty {
   color: rgba(255, 255, 255, 0.48);
   font-size: 0.6rem;
   line-height: 1.4;
+}
+
+#release-radar-bingo.gm-mode .gm-track-album:empty {
+  display: none;
 }
 
 #release-radar-bingo.gm-mode .gm-progress-placeholder {
@@ -931,7 +987,8 @@ body {
   color: #ff8b9b;
 }
 
-#release-radar-bingo.gm-mode .gm-history-modal {
+#release-radar-bingo.gm-mode .gm-history-modal,
+#release-radar-bingo.gm-mode .gm-spotify-modal {
   display: grid;
   position: fixed;
   inset: 0;
@@ -949,11 +1006,21 @@ body {
   visibility: visible;
 }
 
+#release-radar-bingo.gm-spotify-open .gm-spotify-modal {
+  pointer-events: auto;
+  visibility: visible;
+}
+
 #release-radar-bingo.gm-history-visible .gm-history-modal {
   background: rgba(0, 0, 0, 0.66);
 }
 
-#release-radar-bingo.gm-mode .gm-history-panel {
+#release-radar-bingo.gm-spotify-visible .gm-spotify-modal {
+  background: rgba(0, 0, 0, 0.66);
+}
+
+#release-radar-bingo.gm-mode .gm-history-panel,
+#release-radar-bingo.gm-mode .gm-spotify-panel {
   display: flex;
   width: min(92vw, 920px);
   max-height: min(80dvh, 680px);
@@ -969,6 +1036,110 @@ body {
 #release-radar-bingo.gm-history-visible .gm-history-panel {
   opacity: 1;
   transform: none;
+}
+
+#release-radar-bingo.gm-spotify-visible .gm-spotify-panel {
+  opacity: 1;
+  transform: none;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-panel {
+  width: min(92vw, 620px);
+  min-height: 0;
+  overflow: visible;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-title small {
+  color: #62e1ef;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-title strong {
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-panel > p {
+  margin: 14px auto 18px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.63rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form {
+  display: grid;
+  gap: 12px;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form label {
+  display: grid;
+  gap: 6px;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form label > span,
+#release-radar-bingo.gm-mode .gm-spotify-hint {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  outline: 0;
+  background: rgba(0, 0, 0, 0.3);
+  color: white;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form input:focus {
+  border-color: rgba(73, 241, 250, 0.55);
+  box-shadow: 0 0 0 2px rgba(73, 241, 250, 0.08);
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-form input[readonly] {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-hint,
+#release-radar-bingo.gm-mode .gm-spotify-error {
+  min-height: 12px;
+  margin: -4px 0 0;
+  text-align: center;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-error {
+  color: #ff8b9b;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+#release-radar-bingo.gm-mode .gm-spotify-connect {
+  width: 160px;
 }
 
 #release-radar-bingo.gm-mode .gm-history-title {
@@ -1027,7 +1198,9 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   #release-radar-bingo.gm-mode .gm-history-modal,
-  #release-radar-bingo.gm-mode .gm-history-panel {
+  #release-radar-bingo.gm-mode .gm-history-panel,
+  #release-radar-bingo.gm-mode .gm-spotify-modal,
+  #release-radar-bingo.gm-mode .gm-spotify-panel {
     transition: none;
   }
 }

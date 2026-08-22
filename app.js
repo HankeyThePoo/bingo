@@ -167,105 +167,6 @@ async function loadCatalog(url, request = fetch) {
 	return parseCatalog(await response.json());
 }
 //#endregion
-//#region src/gm-prototype.ts
-var GmPrototype = class {
-	root;
-	calls;
-	search;
-	catalog = [];
-	constructor(root) {
-		this.root = root;
-		const shell = root.querySelector(".bingo-shell");
-		if (!shell) throw new Error("The Bingo shell must exist before GM mode is enabled.");
-		root.classList.add("gm-mode");
-		shell.insertAdjacentHTML("beforeend", markup$1());
-		this.calls = this.required(".gm-call-list");
-		this.search = this.required(".gm-call-search");
-		this.search.addEventListener("input", () => this.renderCalls());
-	}
-	setCatalog(catalog) {
-		this.catalog = catalog.filter(({ id }) => id !== FRIDAY_ID);
-		this.renderCalls();
-	}
-	renderCalls() {
-		const query = this.search.value.trim().toLocaleLowerCase();
-		const visible = query ? this.catalog.filter(({ label }) => label.toLocaleLowerCase().includes(query)) : this.catalog;
-		if (!visible.length) {
-			const empty = document.createElement("p");
-			empty.className = "gm-empty";
-			empty.textContent = "NO MATCHING CALLS";
-			this.calls.replaceChildren(empty);
-			return;
-		}
-		this.calls.replaceChildren(...visible.map(({ label }) => {
-			const call = document.createElement("span");
-			call.className = "gm-call";
-			call.textContent = label;
-			return call;
-		}));
-	}
-	required(selector) {
-		const element = this.root.querySelector(selector);
-		if (!element) throw new Error(`Missing GM prototype element: ${selector}`);
-		return element;
-	}
-};
-function markup$1() {
-	return `
-    <aside class="gm-side gm-now-playing glass" aria-label="Spotify and session prototype">
-      <header class="gm-panel-heading">
-        <span><small>SPOTIFY</small><strong>NOW PLAYING</strong></span>
-        <em>DISCONNECTED</em>
-      </header>
-      <div class="gm-artwork-placeholder" aria-hidden="true"><span>✦</span></div>
-      <div class="gm-track-placeholder">
-        <strong>NO TRACK DETECTED</strong>
-        <span>Connect Spotify to display the current release.</span>
-      </div>
-      <div class="gm-progress-placeholder"><span></span></div>
-      <div class="gm-track-stats"><span>0:00</span><span>SONG —</span><span>0:00</span></div>
-      <footer class="gm-session-controls">
-        <span class="gm-control gm-control-primary">START TRACKING</span>
-        <span class="gm-control">NEW SESSION</span>
-      </footer>
-    </aside>
-    <aside class="gm-side gm-calls-panel glass" aria-label="Calls prototype">
-      <header class="gm-panel-heading">
-        <span><small>SELECTED SONG</small><strong>CALLS</strong></span>
-        <em>NO SONG</em>
-      </header>
-      <label class="gm-search">
-        <span class="sr-only">Search calls</span>
-        <input class="gm-call-search" type="search" placeholder="SEARCH CALLS…" autocomplete="off">
-        <span aria-hidden="true">⌕</span>
-      </label>
-      <div class="gm-call-list"><p class="gm-empty">LOADING CALLS…</p></div>
-    </aside>
-    <section class="gm-bottom" aria-label="GM session and verification prototype">
-      <section class="gm-ledger-panel glass">
-        <header class="gm-panel-heading">
-          <span><small>CURRENT SESSION</small><strong>SONG LEDGER</strong></span>
-          <em>0 SONGS</em>
-        </header>
-        <div class="gm-ledger-head"><span>#</span><span>ARTIST / TITLE</span><span>CALLS</span></div>
-        <p class="gm-ledger-empty">START TRACKING TO BUILD THE SESSION LEDGER</p>
-      </section>
-      <section class="gm-verifier-panel glass">
-        <header class="gm-panel-heading">
-          <span><small>FINAL SNAPSHOT</small><strong>BINGO VERIFIER</strong></span>
-        </header>
-        <div class="gm-verifier-body">
-          <div class="gm-mini-board" aria-hidden="true">${Array.from({ length: 25 }, () => "<span></span>").join("")}</div>
-          <div class="gm-verifier-copy">
-            <label><span class="sr-only">Board identifier or URL</span><input type="text" placeholder="BOARD ID OR URL…" disabled></label>
-            <span>PASTE A CARD TO VERIFY THE RESULT</span>
-            <span class="gm-control gm-control-primary">VERIFY</span>
-          </div>
-        </div>
-      </section>
-    </section>`;
-}
-//#endregion
 //#region src/snapshot.ts
 var MAX_MARKED_MASK = 2 ** 25 - 1;
 var COMPACT_LAYOUT_CELLS = 24;
@@ -401,6 +302,343 @@ function hasExactKeys(value, expected) {
 	const actual = Object.keys(value).sort();
 	const sortedExpected = [...expected].sort();
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
+}
+//#endregion
+//#region src/gm-prototype.ts
+var MODAL_TRANSITION_MS = 180;
+var GmPrototype = class {
+	root;
+	playerBoard;
+	shuffleButton;
+	shareButton;
+	verifyModeButton;
+	verifier;
+	verifierGrid;
+	verifierForm;
+	verifierInput;
+	verifierStatus;
+	calls;
+	search;
+	trackingButton;
+	historyButton;
+	historyModal;
+	historyPanel;
+	historyClose;
+	catalog = [];
+	catalogById = /* @__PURE__ */ new Map();
+	verifierOpen = false;
+	historyOpen = false;
+	tracking = false;
+	modalCloseTimer = 0;
+	constructor(root) {
+		this.root = root;
+		const shell = root.querySelector(".bingo-shell");
+		if (!shell) throw new Error("The Bingo shell must exist before GM mode is enabled.");
+		const actions = this.required(".actions");
+		this.playerBoard = this.required(".board");
+		this.shuffleButton = this.required(".shuffle-button");
+		this.shareButton = this.required(".share-button");
+		actions.insertAdjacentHTML("beforeend", actionMarkup());
+		shell.insertAdjacentHTML("beforeend", panelMarkup());
+		this.required(".board-card").insertAdjacentHTML("beforeend", verifierMarkup());
+		root.insertAdjacentHTML("beforeend", historyMarkup());
+		root.classList.add("gm-mode");
+		this.verifyModeButton = this.required(".gm-verify-mode-button");
+		this.verifier = this.required(".gm-verifier-stage");
+		this.verifierGrid = this.required(".gm-verifier-grid");
+		this.verifierForm = this.required(".gm-verifier-form");
+		this.verifierInput = this.required(".gm-verifier-input");
+		this.verifierStatus = this.required(".gm-verifier-status");
+		this.calls = this.required(".gm-call-list");
+		this.search = this.required(".gm-call-search");
+		this.trackingButton = this.required(".gm-tracking-button");
+		this.historyButton = this.required(".gm-history-button");
+		this.historyModal = this.required(".gm-history-modal");
+		this.historyPanel = this.required(".gm-history-panel");
+		this.historyClose = this.required(".gm-history-close");
+		this.renderEmptyVerifier();
+		this.bind();
+	}
+	setCatalog(catalog) {
+		this.catalog = catalog.filter(({ id }) => id !== FRIDAY_ID);
+		this.catalogById = new Map(catalog.map((tile) => [tile.id, tile]));
+		this.verifyModeButton.disabled = false;
+		this.renderCalls();
+	}
+	bind() {
+		this.search.addEventListener("input", () => this.renderCalls());
+		this.verifyModeButton.addEventListener("click", () => this.setVerifierOpen(!this.verifierOpen));
+		this.verifierForm.addEventListener("submit", (event) => {
+			event.preventDefault();
+			this.verifyIdentifier();
+		});
+		this.trackingButton.addEventListener("click", () => this.toggleTracking());
+		this.historyButton.addEventListener("click", () => this.openHistory());
+		this.historyClose.addEventListener("click", () => this.closeHistory());
+		this.historyModal.addEventListener("click", (event) => {
+			if (event.target === this.historyModal) this.closeHistory();
+		});
+		this.root.addEventListener("keydown", (event) => this.handleKeydown(event), true);
+		window.addEventListener("resize", () => {
+			if (this.verifierOpen) this.requestVerifierLabelFit();
+		});
+	}
+	setVerifierOpen(open) {
+		if (open === this.verifierOpen || open && !this.catalogById.size) return;
+		this.verifierOpen = open;
+		this.root.classList.toggle("gm-verifier-open", open);
+		this.playerBoard.hidden = open;
+		this.verifier.hidden = !open;
+		this.shuffleButton.disabled = open;
+		this.shareButton.disabled = open;
+		this.verifyModeButton.setAttribute("aria-pressed", String(open));
+		this.verifyModeButton.textContent = open ? "BOARD" : "VERIFY";
+		if (open) {
+			this.verifierInput.focus({ preventScroll: true });
+			this.requestVerifierLabelFit();
+			this.announce("Bingo verifier opened.");
+		} else {
+			this.shuffleButton.disabled = false;
+			this.shareButton.disabled = false;
+			this.verifyModeButton.focus({ preventScroll: true });
+			this.announce("Returned to your Bingo board.");
+		}
+	}
+	verifyIdentifier() {
+		const identifier = extractIdentifier(this.verifierInput.value);
+		const state = identifier ? decodeState(identifier, [...this.catalogById.values()]) : null;
+		if (!state) {
+			this.renderEmptyVerifier("INVALID BOARD IDENTIFIER", "invalid");
+			this.announce("The board identifier is invalid.");
+			return;
+		}
+		this.renderVerifiedBoard(state);
+	}
+	renderVerifiedBoard(state) {
+		const completedPositions = positionsForLines(state.completedLines);
+		const blackout = state.marked.size === 25;
+		const fragment = document.createDocumentFragment();
+		state.layout.forEach((id, index) => {
+			const tile = this.catalogById.get(id);
+			if (!tile) return;
+			const cell = document.createElement("span");
+			cell.className = "gm-verify-cell";
+			cell.classList.toggle("marked", state.marked.has(index));
+			cell.classList.toggle("in-completed-line", completedPositions.has(index));
+			const label = document.createElement("span");
+			label.className = "gm-verify-label";
+			label.textContent = index === 12 ? blackout ? "BLACKOUT" : state.completedLines.size ? "BINGO" : tile.label : tile.label;
+			cell.append(label);
+			fragment.append(cell);
+		});
+		this.verifierGrid.replaceChildren(fragment);
+		const lines = state.completedLines.size;
+		this.setVerifierStatus(blackout ? "BLACKOUT FOUND" : lines ? `${lines} BINGO ${lines === 1 ? "LINE" : "LINES"} FOUND` : "VALID BOARD — NO BINGO", blackout || lines ? "success" : "valid");
+		this.announce(blackout ? "Blackout found in the submitted board." : lines ? `${lines} completed Bingo ${lines === 1 ? "line" : "lines"} found in the submitted board.` : "The submitted board is valid but has no Bingo.");
+		this.requestVerifierLabelFit();
+	}
+	renderEmptyVerifier(message = "PASTE A BOARD IDENTIFIER", tone = "idle") {
+		const cells = Array.from({ length: 25 }, () => {
+			const cell = document.createElement("span");
+			cell.className = "gm-verify-cell empty";
+			return cell;
+		});
+		this.verifierGrid.replaceChildren(...cells);
+		this.setVerifierStatus(message, tone);
+	}
+	setVerifierStatus(message, tone) {
+		this.verifierStatus.textContent = message;
+		this.verifierStatus.dataset.tone = tone;
+	}
+	renderCalls() {
+		const query = this.search.value.trim().toLocaleLowerCase();
+		const visible = query ? this.catalog.filter(({ label }) => label.toLocaleLowerCase().includes(query)) : this.catalog;
+		if (!visible.length) {
+			const empty = document.createElement("p");
+			empty.className = "gm-empty";
+			empty.textContent = "NO MATCHING CALLS";
+			this.calls.replaceChildren(empty);
+			return;
+		}
+		this.calls.replaceChildren(...visible.map(({ id, label }) => {
+			const call = document.createElement("button");
+			call.type = "button";
+			call.className = "gm-call";
+			call.dataset.callId = id;
+			call.textContent = label;
+			call.disabled = true;
+			call.title = "A playing song is required before calls can be recorded.";
+			return call;
+		}));
+	}
+	toggleTracking() {
+		this.tracking = !this.tracking;
+		this.trackingButton.textContent = this.tracking ? "STOP TRACKING" : "START TRACKING";
+		this.trackingButton.setAttribute("aria-pressed", String(this.tracking));
+		this.root.classList.toggle("gm-is-tracking", this.tracking);
+		this.announce(this.tracking ? "Session tracking started. Waiting for a Spotify track." : "Session tracking stopped.");
+	}
+	openHistory() {
+		if (this.historyOpen) return;
+		if (this.modalCloseTimer) window.clearTimeout(this.modalCloseTimer);
+		this.modalCloseTimer = 0;
+		this.historyOpen = true;
+		this.root.classList.add("gm-history-open");
+		this.historyModal.setAttribute("aria-hidden", "false");
+		this.historyButton.setAttribute("aria-expanded", "true");
+		this.historyPanel.focus({ preventScroll: true });
+		requestAnimationFrame(() => {
+			if (!this.historyOpen) return;
+			this.root.classList.add("gm-history-visible");
+			window.setTimeout(() => {
+				if (this.historyOpen) this.historyClose.focus({ preventScroll: true });
+			}, MODAL_TRANSITION_MS);
+		});
+	}
+	closeHistory() {
+		if (!this.historyOpen) return;
+		this.historyOpen = false;
+		this.root.classList.remove("gm-history-visible");
+		this.historyModal.setAttribute("aria-hidden", "true");
+		this.historyButton.setAttribute("aria-expanded", "false");
+		const finish = () => {
+			this.modalCloseTimer = 0;
+			this.root.classList.remove("gm-history-open");
+			this.historyButton.focus({ preventScroll: true });
+		};
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) finish();
+		else this.modalCloseTimer = window.setTimeout(finish, MODAL_TRANSITION_MS);
+	}
+	handleKeydown(event) {
+		if (!this.historyOpen) return;
+		if (event.key === "Escape") {
+			event.preventDefault();
+			this.closeHistory();
+			return;
+		}
+		if (event.key !== "Tab") return;
+		const focusable = [...this.historyPanel.querySelectorAll("button:not([disabled]), input:not([disabled])")].filter((element) => !element.hidden);
+		const first = focusable[0];
+		const last = focusable.at(-1);
+		if (!first || !last) return;
+		if (!this.historyPanel.contains(document.activeElement)) {
+			event.preventDefault();
+			(event.shiftKey ? last : first).focus();
+		} else if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+	requestVerifierLabelFit() {
+		requestAnimationFrame(() => this.fitVerifierLabels());
+	}
+	fitVerifierLabels() {
+		for (const label of this.verifierGrid.querySelectorAll(".gm-verify-label")) {
+			const cell = label.parentElement;
+			if (!cell || cell.clientWidth <= 0 || cell.clientHeight <= 0) continue;
+			const availableWidth = cell.clientWidth - 12;
+			const availableHeight = cell.clientHeight - 12;
+			let low = 6;
+			let high = Math.min(availableWidth, availableHeight);
+			label.style.width = `${availableWidth}px`;
+			for (let attempt = 0; attempt < 9; attempt += 1) {
+				const candidate = (low + high) / 2;
+				label.style.fontSize = `${candidate}px`;
+				if (label.scrollWidth <= availableWidth + .5 && label.scrollHeight <= availableHeight + .5) low = candidate;
+				else high = candidate;
+			}
+			label.style.fontSize = `${Math.floor(low * 10) / 10}px`;
+		}
+	}
+	announce(message) {
+		const region = this.root.querySelector(".live-region");
+		if (!region) return;
+		region.textContent = "";
+		requestAnimationFrame(() => {
+			region.textContent = message;
+		});
+	}
+	required(selector) {
+		const element = this.root.querySelector(selector);
+		if (!element) throw new Error(`Missing GM prototype element: ${selector}`);
+		return element;
+	}
+};
+function extractIdentifier(value) {
+	const trimmed = value.trim();
+	if (!trimmed) return "";
+	try {
+		const url = new URL(trimmed, window.location.href);
+		const board = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash).get("board");
+		if (board) return board;
+	} catch {}
+	if (trimmed.startsWith("#")) return new URLSearchParams(trimmed.slice(1)).get("board") ?? trimmed;
+	return trimmed;
+}
+function actionMarkup() {
+	return `<button class="button gm-verify-mode-button" type="button" aria-pressed="false" disabled>VERIFY</button>`;
+}
+function panelMarkup() {
+	return `
+    <aside class="gm-side gm-now-playing glass" aria-label="Spotify and session">
+      <header class="gm-panel-heading">
+        <span><small>SPOTIFY</small><strong>NOW PLAYING</strong></span>
+        <em>DISCONNECTED</em>
+      </header>
+      <div class="gm-artwork-placeholder" aria-hidden="true"><span>✦</span></div>
+      <div class="gm-track-placeholder">
+        <strong>NO TRACK DETECTED</strong>
+        <span>Connect Spotify to display the current release.</span>
+      </div>
+      <div class="gm-progress-placeholder"><span></span></div>
+      <div class="gm-track-stats"><span>0:00</span><span>SONG —</span><span>0:00</span></div>
+      <footer class="gm-session-controls">
+        <button class="gm-control gm-control-primary gm-tracking-button" type="button" aria-pressed="false">START TRACKING</button>
+        <button class="gm-control gm-history-button" type="button" aria-haspopup="dialog" aria-expanded="false">HISTORY</button>
+      </footer>
+    </aside>
+    <aside class="gm-side gm-calls-panel glass" aria-label="Calls">
+      <header class="gm-panel-heading">
+        <span><small>SELECTED SONG</small><strong>CALLS</strong></span>
+        <em>NO SONG</em>
+      </header>
+      <label class="gm-search">
+        <span class="sr-only">Search calls</span>
+        <input class="gm-call-search" type="search" placeholder="SEARCH CALLS…" autocomplete="off">
+        <span aria-hidden="true">⌕</span>
+      </label>
+      <div class="gm-call-list"><p class="gm-empty">LOADING CALLS…</p></div>
+    </aside>`;
+}
+function verifierMarkup() {
+	return `
+    <section class="gm-verifier-stage" aria-label="Bingo verifier" hidden>
+      <div class="gm-verifier-grid" role="img" aria-label="Submitted Bingo board"></div>
+      <form class="gm-verifier-form">
+        <label><span class="sr-only">Board identifier or URL</span><input class="gm-verifier-input" type="text" placeholder="BOARD IDENTIFIER OR URL…" autocomplete="off"></label>
+        <button class="button gm-verify-submit" type="submit">CHECK</button>
+        <p class="gm-verifier-status" data-tone="idle" aria-live="polite"></p>
+      </form>
+    </section>`;
+}
+function historyMarkup() {
+	return `
+    <div class="gm-history-modal" aria-hidden="true">
+      <section class="gm-history-panel glass" role="dialog" aria-modal="true" aria-labelledby="gm-history-title" tabindex="-1">
+        <header class="gm-history-title">
+          <span><small>CURRENT SESSION</small><strong id="gm-history-title">SONG HISTORY</strong></span>
+          <em>0 SONGS</em>
+        </header>
+        <div class="gm-history-columns"><span>#</span><span>ARTIST / TITLE</span><span>CALLS</span></div>
+        <p class="gm-history-empty">START TRACKING TO BUILD THE SESSION HISTORY</p>
+        <div class="gm-history-actions">
+          <button class="button gm-history-close" type="button">CLOSE</button>
+        </div>
+      </section>
+    </div>`;
 }
 //#endregion
 //#region src/storage.ts

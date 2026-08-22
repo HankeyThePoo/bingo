@@ -167,6 +167,105 @@ async function loadCatalog(url, request = fetch) {
 	return parseCatalog(await response.json());
 }
 //#endregion
+//#region src/gm-prototype.ts
+var GmPrototype = class {
+	root;
+	calls;
+	search;
+	catalog = [];
+	constructor(root) {
+		this.root = root;
+		const shell = root.querySelector(".bingo-shell");
+		if (!shell) throw new Error("The Bingo shell must exist before GM mode is enabled.");
+		root.classList.add("gm-mode");
+		shell.insertAdjacentHTML("beforeend", markup$1());
+		this.calls = this.required(".gm-call-list");
+		this.search = this.required(".gm-call-search");
+		this.search.addEventListener("input", () => this.renderCalls());
+	}
+	setCatalog(catalog) {
+		this.catalog = catalog.filter(({ id }) => id !== FRIDAY_ID);
+		this.renderCalls();
+	}
+	renderCalls() {
+		const query = this.search.value.trim().toLocaleLowerCase();
+		const visible = query ? this.catalog.filter(({ label }) => label.toLocaleLowerCase().includes(query)) : this.catalog;
+		if (!visible.length) {
+			const empty = document.createElement("p");
+			empty.className = "gm-empty";
+			empty.textContent = "NO MATCHING CALLS";
+			this.calls.replaceChildren(empty);
+			return;
+		}
+		this.calls.replaceChildren(...visible.map(({ label }) => {
+			const call = document.createElement("span");
+			call.className = "gm-call";
+			call.textContent = label;
+			return call;
+		}));
+	}
+	required(selector) {
+		const element = this.root.querySelector(selector);
+		if (!element) throw new Error(`Missing GM prototype element: ${selector}`);
+		return element;
+	}
+};
+function markup$1() {
+	return `
+    <aside class="gm-side gm-now-playing glass" aria-label="Spotify and session prototype">
+      <header class="gm-panel-heading">
+        <span><small>SPOTIFY</small><strong>NOW PLAYING</strong></span>
+        <em>DISCONNECTED</em>
+      </header>
+      <div class="gm-artwork-placeholder" aria-hidden="true"><span>✦</span></div>
+      <div class="gm-track-placeholder">
+        <strong>NO TRACK DETECTED</strong>
+        <span>Connect Spotify to display the current release.</span>
+      </div>
+      <div class="gm-progress-placeholder"><span></span></div>
+      <div class="gm-track-stats"><span>0:00</span><span>SONG —</span><span>0:00</span></div>
+      <footer class="gm-session-controls">
+        <span class="gm-control gm-control-primary">START TRACKING</span>
+        <span class="gm-control">NEW SESSION</span>
+      </footer>
+    </aside>
+    <aside class="gm-side gm-calls-panel glass" aria-label="Calls prototype">
+      <header class="gm-panel-heading">
+        <span><small>SELECTED SONG</small><strong>CALLS</strong></span>
+        <em>NO SONG</em>
+      </header>
+      <label class="gm-search">
+        <span class="sr-only">Search calls</span>
+        <input class="gm-call-search" type="search" placeholder="SEARCH CALLS…" autocomplete="off">
+        <span aria-hidden="true">⌕</span>
+      </label>
+      <div class="gm-call-list"><p class="gm-empty">LOADING CALLS…</p></div>
+    </aside>
+    <section class="gm-bottom" aria-label="GM session and verification prototype">
+      <section class="gm-ledger-panel glass">
+        <header class="gm-panel-heading">
+          <span><small>CURRENT SESSION</small><strong>SONG LEDGER</strong></span>
+          <em>0 SONGS</em>
+        </header>
+        <div class="gm-ledger-head"><span>#</span><span>ARTIST / TITLE</span><span>CALLS</span></div>
+        <p class="gm-ledger-empty">START TRACKING TO BUILD THE SESSION LEDGER</p>
+      </section>
+      <section class="gm-verifier-panel glass">
+        <header class="gm-panel-heading">
+          <span><small>FINAL SNAPSHOT</small><strong>BINGO VERIFIER</strong></span>
+        </header>
+        <div class="gm-verifier-body">
+          <div class="gm-mini-board" aria-hidden="true">${Array.from({ length: 25 }, () => "<span></span>").join("")}</div>
+          <div class="gm-verifier-copy">
+            <label><span class="sr-only">Board identifier or URL</span><input type="text" placeholder="BOARD ID OR URL…" disabled></label>
+            <span>PASTE A CARD TO VERIFY THE RESULT</span>
+            <span class="gm-control gm-control-primary">VERIFY</span>
+          </div>
+        </div>
+      </section>
+    </section>`;
+}
+//#endregion
 //#region src/snapshot.ts
 var MAX_MARKED_MASK = 2 ** 25 - 1;
 var COMPACT_LAYOUT_CELLS = 24;
@@ -700,9 +799,11 @@ function markup() {
 //#endregion
 //#region src/main.ts
 var root = document.querySelector("#release-radar-bingo");
+var gmMode = new URLSearchParams(window.location.search).get("gm") === "1";
 if (root && !root.dataset.bingoReady) {
 	root.dataset.bingoReady = "true";
 	const view = new BingoView(root);
+	const gmPrototype = gmMode ? new GmPrototype(root) : null;
 	const storage = new BoardStorage();
 	let catalog = [];
 	let state = null;
@@ -729,6 +830,7 @@ if (root && !root.dataset.bingoReady) {
 			view.showFailure();
 			return;
 		}
+		gmPrototype?.setCatalog(catalog);
 		const shared = readBoardHash(window.location.hash, catalog);
 		let announcement = "";
 		if (shared.kind === "valid") {

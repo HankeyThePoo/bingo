@@ -551,10 +551,6 @@ body {
     outline-offset: 3px;
   }
 }
-#release-radar-bingo.gm-mode {
-  padding: 12px 18px 18px;
-}
-
 #release-radar-bingo.gm-mode .bingo-shell {
   display: grid;
   grid-template-areas:
@@ -562,22 +558,20 @@ body {
     ". actions ."
     "now board calls"
     "bottom bottom bottom";
-  grid-template-columns: minmax(280px, 340px) minmax(480px, 620px) minmax(340px, 410px);
-  grid-template-rows: max-content max-content minmax(0, 1fr) 230px;
+  grid-template-columns: minmax(240px, 1fr) minmax(600px, 720px) minmax(240px, 1fr);
+  grid-template-rows: max-content max-content minmax(0, 720px) minmax(160px, 1fr);
   width: 100%;
-  max-width: 1420px;
-  gap: 10px 14px;
+  max-width: 1600px;
+  column-gap: 14px;
+  row-gap: 0;
 }
 
 #release-radar-bingo.gm-mode h1 {
   grid-area: title;
-  margin: 4px 0 8px;
-  font-size: 1.75rem;
 }
 
 #release-radar-bingo.gm-mode .actions {
   grid-area: actions;
-  margin: 0 auto 2px;
 }
 
 #release-radar-bingo.gm-mode .board-stage {
@@ -585,10 +579,6 @@ body {
   width: 100%;
   height: 100%;
   place-items: start center;
-}
-
-#release-radar-bingo.gm-mode .board-card {
-  width: min(100cqw, 100cqh, 620px);
 }
 
 #release-radar-bingo.gm-mode .gm-side,
@@ -606,6 +596,13 @@ body {
   grid-area: now;
 }
 
+#release-radar-bingo.gm-mode .gm-side {
+  width: 100%;
+  height: 500px;
+  max-height: 100%;
+  align-self: start;
+}
+
 #release-radar-bingo.gm-mode .gm-calls-panel {
   grid-area: calls;
 }
@@ -616,6 +613,7 @@ body {
   grid-template-columns: minmax(0, 1.7fr) minmax(390px, 1fr);
   min-width: 0;
   min-height: 0;
+  margin-top: 10px;
   gap: 14px;
 }
 
@@ -844,7 +842,7 @@ body {
 #release-radar-bingo.gm-mode .gm-verifier-body {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(120px, 160px) minmax(170px, 1fr);
+  grid-template-columns: minmax(80px, 110px) minmax(170px, 1fr);
   align-items: center;
   min-height: 0;
   gap: 14px;
@@ -854,7 +852,9 @@ body {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 3px;
+  width: min(100%, 110px);
   max-height: 100%;
+  justify-self: center;
   border-radius: 10px;
   aspect-ratio: 1;
 }
@@ -880,7 +880,7 @@ body {
 
 @media (max-height: 800px) {
   #release-radar-bingo.gm-mode .bingo-shell {
-    grid-template-rows: max-content max-content minmax(0, 1fr) 190px;
+    grid-template-rows: max-content max-content minmax(0, 720px) minmax(130px, 1fr);
   }
 
   #release-radar-bingo.gm-mode .gm-side,
@@ -890,7 +890,7 @@ body {
   }
 
   #release-radar-bingo.gm-mode .gm-artwork-placeholder {
-    width: min(100%, 180px);
+    width: min(100%, 140px);
   }
 }
 /*$vite$:1*/

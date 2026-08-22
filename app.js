@@ -408,12 +408,14 @@ var SpotifyAuth = class {
 				message: "Spotify tokens could not be saved in this browser."
 			};
 			return { kind: "connected" };
-		} catch {
-			return {
-				kind: "error",
-				message: "Spotify could not be reached during authorization."
-			};
-		}
+} catch (error) {
+  console.error("Spotify token exchange failed:", error);
+
+  return {
+    kind: "error",
+    message: "Spotify could not be reached during authorization."
+  };
+}
 	}
 	async accessToken(forceRefresh = false) {
 		const tokens = this.loadTokens();

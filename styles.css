@@ -19,7 +19,7 @@ body {
   padding: 1rem 12px 3rem;
   overflow: clip;
   box-sizing: border-box;
-  color: FBFBFB;
+  color: #FBFBFB;
   font-family: "Monument Extended", Inter, system-ui, sans-serif;
 }
 
@@ -190,7 +190,7 @@ body {
   border-radius: 10px;
   appearance: none;
   background: transparent;
-  color: white;
+  color: #FBFBFB;
   cursor: pointer;
   perspective: 720px;
   touch-action: manipulation;

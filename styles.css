@@ -90,7 +90,7 @@ body {
   padding: 0 16px;
   border-radius: 14px;
   background: var(--gradient);
-  color: #171717;
+  color: #101010;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 800;
@@ -248,7 +248,7 @@ body {
 
 #release-radar-bingo .tile-back {
   background: var(--gradient);
-  color: #171717;
+  color: #101010;
   transform: rotateY(180deg);
 }
 
@@ -257,7 +257,7 @@ body {
   position: absolute;
   top: 7px;
   right: 8px;
-  color: #171717;
+  color: #101010;
   font-size: clamp(9px, 1.4vw, 13px);
   line-height: 1;
   opacity: 0;

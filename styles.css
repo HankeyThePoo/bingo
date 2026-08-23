@@ -90,7 +90,7 @@ body {
   padding: 0 16px;
   border-radius: 14px;
   background: var(--gradient);
-  color: #020D19;
+  color: #16161e;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 800;
@@ -248,7 +248,7 @@ body {
 
 #release-radar-bingo .tile-back {
   background: var(--gradient);
-  color: #020D19;
+  color: #16161e;
   transform: rotateY(180deg);
 }
 

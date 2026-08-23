@@ -257,7 +257,7 @@ body {
   position: absolute;
   top: 7px;
   right: 8px;
-  color: rgba(50, 50, 58, 0.72);
+  color: #171717;
   font-size: clamp(9px, 1.4vw, 13px);
   line-height: 1;
   opacity: 0;

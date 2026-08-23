@@ -19,7 +19,7 @@ body {
   padding: 1rem 12px 3rem;
   overflow: clip;
   box-sizing: border-box;
-  color: white;
+  color: FBFBFB;
   font-family: "Monument Extended", Inter, system-ui, sans-serif;
 }
 
@@ -90,7 +90,7 @@ body {
   padding: 0 16px;
   border-radius: 14px;
   background: var(--gradient);
-  color: #32323a;
+  color: #171717;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 800;
@@ -190,7 +190,7 @@ body {
   border-radius: 10px;
   appearance: none;
   background: transparent;
-  color: white;
+  color: FBFBFB;
   cursor: pointer;
   perspective: 720px;
   touch-action: manipulation;
@@ -248,7 +248,7 @@ body {
 
 #release-radar-bingo .tile-back {
   background: var(--gradient);
-  color: #32323a;
+  color: #171717;
   transform: rotateY(180deg);
 }
 

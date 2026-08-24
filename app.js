@@ -64,7 +64,7 @@ function parseCatalog(value) {
 	const tiles = [];
 	const ids = /* @__PURE__ */ new Set();
 	for (const candidate of value) {
-		if (!isRecord$1(candidate) || !hasExactKeys$1(candidate, ["id", "label"])) throw new Error("Every tile must contain exactly an id and label.");
+		if (!isRecord$3(candidate) || !hasExactKeys$1(candidate, ["id", "label"])) throw new Error("Every tile must contain exactly an id and label.");
 		const { id, label } = candidate;
 		if (typeof id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || ids.has(id)) throw new Error("Tile IDs must be unique, lowercase slugs.");
 		if (typeof label !== "string" || label.trim() !== label || label.length === 0 || label.length > 60) throw new Error("Tile labels must contain between 1 and 60 characters.");
@@ -119,14 +119,13 @@ function toggleTile(state, index) {
 	else marked.add(index);
 	marked.add(12);
 	const completedLines = completedLineIds(marked);
-	const newlyCompletedLineIds = [...completedLines].filter((lineId) => !state.completedLines.has(lineId));
 	return {
 		state: {
 			layout: state.layout,
 			marked,
 			completedLines
 		},
-		newlyCompletedLineIds
+		newlyCompletedLineIds: [...completedLines].filter((lineId) => !state.completedLines.has(lineId))
 	};
 }
 function completedLineIds(marked) {
@@ -152,7 +151,7 @@ function positionsForLines(lineIds) {
 function hasManualMarks(state) {
 	return [...state.marked].some((index) => index !== 12);
 }
-function isRecord$1(value) {
+function isRecord$3(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function hasExactKeys$1(value, expected) {
@@ -183,7 +182,7 @@ function stateToSnapshot(state) {
 	};
 }
 function parseSnapshot(value, catalog) {
-	if (!isRecord(value) || !hasExactKeys(value, ["layout", "marked"])) return null;
+	if (!isRecord$2(value) || !hasExactKeys(value, ["layout", "marked"])) return null;
 	if (!Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > MAX_MARKED_MASK) return null;
 	const catalogIds = new Set(catalog.map(({ id }) => id));
 	const layout = [];
@@ -223,9 +222,6 @@ function encodeState(state, catalog) {
 	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << COMPACT_MARK_BITS | marked);
 }
 function decodeState(payload, catalog) {
-	return decodeCompactState(payload, catalog);
-}
-function decodeCompactState(payload, catalog) {
 	try {
 		const ordinaryIds = compactCatalogIds(catalog);
 		const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
@@ -248,17 +244,23 @@ function decodeCompactState(payload, catalog) {
 		const marked = /* @__PURE__ */ new Set();
 		let markedBit = 0n;
 		for (let index = 0; index < 25; index += 1) {
-			if (index === 12) {
-				marked.add(index);
-				continue;
-			}
-			if ((markedMask & 1n << markedBit) !== 0n) marked.add(index);
-			markedBit += 1n;
+			if (index === 12) marked.add(index);
+			else if ((markedMask & 1n << markedBit) !== 0n) marked.add(index);
+			if (index !== 12) markedBit += 1n;
 		}
 		return restoreState(layout, marked);
 	} catch {
 		return null;
 	}
+}
+function readBoardHash(hash, catalog) {
+	const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+	if (!params.has("board")) return { kind: "none" };
+	const state = decodeState(params.get("board") ?? "", catalog);
+	return state ? {
+		kind: "valid",
+		state
+	} : { kind: "invalid" };
 }
 function compactCatalogIds(catalog) {
 	const ids = catalog.filter(({ id }) => id !== FRIDAY_ID).map(({ id }) => id).sort();
@@ -293,22 +295,1001 @@ function decodeBigInt(payload) {
 	for (const character of atob(padded)) value = value << 8n | BigInt(character.charCodeAt(0));
 	return value;
 }
-function readBoardHash(hash, catalog) {
-	const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-	if (!params.has("board")) return { kind: "none" };
-	const state = decodeState(params.get("board") ?? "", catalog);
-	return state ? {
-		kind: "valid",
-		state
-	} : { kind: "invalid" };
-}
-function isRecord(value) {
+function isRecord$2(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function hasExactKeys(value, expected) {
 	const actual = Object.keys(value).sort();
 	const sortedExpected = [...expected].sort();
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
+}
+//#endregion
+//#region src/spotify-auth.ts
+var SPOTIFY_CONFIG_KEY = "release-radar-bingo:spotify-config";
+var SPOTIFY_TOKENS_KEY = "release-radar-bingo:spotify-tokens";
+var SPOTIFY_TRANSACTION_KEY = "release-radar-bingo:spotify-auth-transaction";
+var SPOTIFY_SCOPE = "user-read-currently-playing";
+var RECORD_VERSION = 1;
+var TOKEN_EXPIRY_MARGIN_MS = 3e4;
+var SpotifyAuth = class {
+	local;
+	session;
+	fetcher;
+	now;
+	constructor(local = browserStorage$1("localStorage"), session = browserStorage$1("sessionStorage"), fetcher = fetch, now = Date.now) {
+		this.local = local;
+		this.session = session;
+		this.fetcher = fetcher;
+		this.now = now;
+	}
+	loadConfig() {
+		return readRecord(this.local, SPOTIFY_CONFIG_KEY, parseConfig);
+	}
+	saveConfig(clientId, redirectUri) {
+		const previousConfig = this.loadConfig();
+		const hadTokens = this.loadTokens() !== null;
+		const config = parseConfig({
+			version: RECORD_VERSION,
+			clientId: clientId.trim(),
+			redirectUri
+		});
+		if (!config || !writeRecord(this.local, "release-radar-bingo:spotify-config", config)) return null;
+		if (hadTokens && (!previousConfig || previousConfig.clientId !== config.clientId || previousConfig.redirectUri !== config.redirectUri)) this.clearTokens();
+		return config;
+	}
+	isConnected() {
+		return this.loadConfig() !== null && this.loadTokens() !== null;
+	}
+	async createAuthorizationUrl(config) {
+		try {
+			const verifier = randomBase64Url(64);
+			const challenge = await sha256Base64Url(verifier);
+			const transaction = {
+				version: RECORD_VERSION,
+				state: randomBase64Url(24),
+				verifier,
+				redirectUri: config.redirectUri
+			};
+			if (!writeRecord(this.session, "release-radar-bingo:spotify-auth-transaction", transaction)) return null;
+			const url = new URL("https://accounts.spotify.com/authorize");
+			url.search = new URLSearchParams({
+				client_id: config.clientId,
+				response_type: "code",
+				redirect_uri: config.redirectUri,
+				state: transaction.state,
+				scope: SPOTIFY_SCOPE,
+				code_challenge_method: "S256",
+				code_challenge: challenge
+			}).toString();
+			return url.toString();
+		} catch {
+			return null;
+		}
+	}
+	async completeCallback(search) {
+		const params = new URLSearchParams(search);
+		const code = params.get("code");
+		const error = params.get("error");
+		if (!code && !error) return { kind: "none" };
+		const transaction = readRecord(this.session, SPOTIFY_TRANSACTION_KEY, parseTransaction);
+		removeRecord(this.session, SPOTIFY_TRANSACTION_KEY);
+		if (error) return {
+			kind: "error",
+			message: "Spotify authorization was cancelled."
+		};
+		if (!transaction || params.get("state") !== transaction.state) return {
+			kind: "error",
+			message: "Spotify authorization could not be verified."
+		};
+		const config = this.loadConfig();
+		if (!config || config.redirectUri !== transaction.redirectUri) return {
+			kind: "error",
+			message: "Spotify setup changed during authorization."
+		};
+		try {
+			const response = await this.fetcher("https://accounts.spotify.com/api/token", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "authorization_code",
+					code: code ?? "",
+					redirect_uri: config.redirectUri,
+					client_id: config.clientId,
+					code_verifier: transaction.verifier
+				})
+			});
+			if (!response.ok) return {
+				kind: "error",
+				message: "Spotify rejected the authorization code."
+			};
+			const token = parseTokenResponse(await response.json(), null, this.now());
+			if (!token || !writeRecord(this.local, "release-radar-bingo:spotify-tokens", token)) return {
+				kind: "error",
+				message: "Spotify tokens could not be saved in this browser."
+			};
+			return { kind: "connected" };
+		} catch {
+			return {
+				kind: "error",
+				message: "Spotify could not be reached during authorization."
+			};
+		}
+	}
+	async accessToken(forceRefresh = false) {
+		const tokens = this.loadTokens();
+		if (!tokens) return null;
+		if (!forceRefresh && tokens.expiresAt > this.now() + TOKEN_EXPIRY_MARGIN_MS) return tokens.accessToken;
+		const config = this.loadConfig();
+		if (!config) return null;
+		try {
+			const response = await this.fetcher("https://accounts.spotify.com/api/token", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				body: new URLSearchParams({
+					grant_type: "refresh_token",
+					refresh_token: tokens.refreshToken,
+					client_id: config.clientId
+				})
+			});
+			if (!response.ok) {
+				if (response.status === 400 || response.status === 401) this.clearTokens();
+				return null;
+			}
+			const refreshed = parseTokenResponse(await response.json(), tokens.refreshToken, this.now());
+			if (!refreshed || !writeRecord(this.local, "release-radar-bingo:spotify-tokens", refreshed)) return null;
+			return refreshed.accessToken;
+		} catch {
+			return null;
+		}
+	}
+	disconnect() {
+		this.clearTokens();
+		removeRecord(this.session, SPOTIFY_TRANSACTION_KEY);
+	}
+	loadTokens() {
+		return readRecord(this.local, SPOTIFY_TOKENS_KEY, parseTokens);
+	}
+	clearTokens() {
+		removeRecord(this.local, SPOTIFY_TOKENS_KEY);
+	}
+};
+function currentSpotifyRedirectUri(location = window.location) {
+	const url = new URL(location.href);
+	url.search = "";
+	url.searchParams.set("gm", "1");
+	url.hash = "";
+	return url.toString();
+}
+function cleanSpotifyCallbackUrl(location = window.location) {
+	const url = new URL(location.href);
+	url.searchParams.delete("code");
+	url.searchParams.delete("state");
+	url.searchParams.delete("error");
+	return url.toString();
+}
+function parseConfig(value) {
+	if (!isExactRecord(value, [
+		"version",
+		"clientId",
+		"redirectUri"
+	]) || value.version !== RECORD_VERSION) return null;
+	if (typeof value.clientId !== "string" || !/^[A-Za-z0-9]{16,64}$/u.test(value.clientId)) return null;
+	if (typeof value.redirectUri !== "string" || !validRedirectUri(value.redirectUri)) return null;
+	return {
+		version: RECORD_VERSION,
+		clientId: value.clientId,
+		redirectUri: value.redirectUri
+	};
+}
+function parseTokens(value) {
+	if (!isExactRecord(value, [
+		"version",
+		"accessToken",
+		"refreshToken",
+		"expiresAt"
+	]) || value.version !== RECORD_VERSION) return null;
+	if (typeof value.accessToken !== "string" || value.accessToken.length < 8 || typeof value.refreshToken !== "string" || value.refreshToken.length < 8 || typeof value.expiresAt !== "number" || !Number.isSafeInteger(value.expiresAt) || value.expiresAt <= 0) return null;
+	return {
+		version: RECORD_VERSION,
+		accessToken: value.accessToken,
+		refreshToken: value.refreshToken,
+		expiresAt: value.expiresAt
+	};
+}
+function parseTransaction(value) {
+	if (!isExactRecord(value, [
+		"version",
+		"state",
+		"verifier",
+		"redirectUri"
+	]) || value.version !== RECORD_VERSION) return null;
+	if (typeof value.state !== "string" || value.state.length < 16 || typeof value.verifier !== "string" || value.verifier.length < 43 || typeof value.redirectUri !== "string" || !validRedirectUri(value.redirectUri)) return null;
+	return {
+		version: RECORD_VERSION,
+		state: value.state,
+		verifier: value.verifier,
+		redirectUri: value.redirectUri
+	};
+}
+function parseTokenResponse(value, existingRefreshToken, now) {
+	if (!isRecord$1(value)) return null;
+	const accessToken = value.access_token;
+	const refreshToken = value.refresh_token ?? existingRefreshToken;
+	const expiresIn = value.expires_in;
+	if (typeof accessToken !== "string" || accessToken.length < 8 || typeof refreshToken !== "string" || refreshToken.length < 8 || typeof expiresIn !== "number" || !Number.isFinite(expiresIn) || expiresIn <= 0) return null;
+	return {
+		version: RECORD_VERSION,
+		accessToken,
+		refreshToken,
+		expiresAt: Math.round(now + expiresIn * 1e3)
+	};
+}
+function validRedirectUri(value) {
+	try {
+		const url = new URL(value);
+		if (url.hash || url.username || url.password) return false;
+		if (url.protocol === "https:") return true;
+		return url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "[::1]");
+	} catch {
+		return false;
+	}
+}
+function browserStorage$1(kind) {
+	try {
+		return window[kind];
+	} catch {
+		return null;
+	}
+}
+function readRecord(storage, key, parse) {
+	try {
+		if (!storage) return null;
+		const raw = storage.getItem(key);
+		return raw === null ? null : parse(JSON.parse(raw));
+	} catch {
+		return null;
+	}
+}
+function writeRecord(storage, key, value) {
+	try {
+		if (!storage) return false;
+		storage.setItem(key, JSON.stringify(value));
+		return true;
+	} catch {
+		return false;
+	}
+}
+function removeRecord(storage, key) {
+	try {
+		storage?.removeItem(key);
+	} catch {}
+}
+function isRecord$1(value) {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function isExactRecord(value, keys) {
+	if (!isRecord$1(value)) return false;
+	const actual = Object.keys(value).sort();
+	const expected = [...keys].sort();
+	return actual.length === expected.length && expected.every((key, index) => actual[index] === key);
+}
+function randomBase64Url(bytes) {
+	return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(bytes)));
+}
+async function sha256Base64Url(value) {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+	return bytesToBase64Url(new Uint8Array(digest));
+}
+function bytesToBase64Url(bytes) {
+	let binary = "";
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+//#endregion
+//#region src/spotify-api.ts
+async function fetchCurrentlyPlaying(accessToken, fetcher = fetch) {
+	try {
+		const response = await fetcher("https://api.spotify.com/v1/me/player/currently-playing", { headers: { Authorization: `Bearer ${accessToken}` } });
+		if (response.status === 204) return { kind: "empty" };
+		if (response.status === 401) return { kind: "unauthorized" };
+		if (response.status === 429) {
+			const seconds = Number.parseFloat(response.headers.get("Retry-After") ?? "");
+			return {
+				kind: "rate-limited",
+				retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1e3) : 3e3
+			};
+		}
+		if (!response.ok) return { kind: "unavailable" };
+		const track = parseCurrentlyPlaying(await response.json());
+		return track ? {
+			kind: "track",
+			track
+		} : { kind: "empty" };
+	} catch {
+		return { kind: "network-error" };
+	}
+}
+function parseCurrentlyPlaying(value) {
+	if (!isRecord(value) || !isRecord(value.item) || value.item.type !== "track") return null;
+	const item = value.item;
+	if (typeof item.id !== "string" || item.id.length === 0 || typeof item.name !== "string" || item.name.length === 0 || typeof item.duration_ms !== "number" || !Number.isFinite(item.duration_ms) || item.duration_ms <= 0 || !Array.isArray(item.artists) || !isRecord(item.album)) return null;
+	const artists = item.artists.filter(isRecord).map((artist) => artist.name).filter((name) => typeof name === "string" && name.length > 0);
+	if (!artists.length || typeof item.album.name !== "string") return null;
+	const artworkUrl = (Array.isArray(item.album.images) ? item.album.images.filter(isRecord) : []).map((image) => image.url).find((url) => typeof url === "string" && /^https:\/\//u.test(url)) ?? null;
+	const externalUrls = isRecord(item.external_urls) ? item.external_urls : null;
+	const spotifyUrl = typeof externalUrls?.spotify === "string" ? externalUrls.spotify : null;
+	const progress = typeof value.progress_ms === "number" && Number.isFinite(value.progress_ms) ? Math.max(0, Math.min(item.duration_ms, value.progress_ms)) : 0;
+	return {
+		id: item.id,
+		title: item.name,
+		artists: artists.join(", "),
+		album: item.album.name,
+		artworkUrl,
+		spotifyUrl,
+		explicit: item.explicit === true,
+		durationMs: item.duration_ms,
+		progressMs: progress,
+		isPlaying: value.is_playing === true
+	};
+}
+function isRecord(value) {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+//#endregion
+//#region src/spotify-monitor.ts
+var POLL_INTERVAL_MS = 3e3;
+var SpotifyMonitor = class {
+	auth;
+	onResult;
+	page;
+	loadCurrentlyPlaying;
+	timer = 0;
+	generation = 0;
+	running = false;
+	constructor(auth, onResult, page = document, loadCurrentlyPlaying = fetchCurrentlyPlaying) {
+		this.auth = auth;
+		this.onResult = onResult;
+		this.page = page;
+		this.loadCurrentlyPlaying = loadCurrentlyPlaying;
+		this.page.addEventListener("visibilitychange", () => this.handleVisibility());
+	}
+	start() {
+		if (this.running) return;
+		this.running = true;
+		this.generation += 1;
+		if (!this.page.hidden) this.schedule(0, this.generation);
+	}
+	stop() {
+		this.running = false;
+		this.generation += 1;
+		this.clearTimer();
+	}
+	handleVisibility() {
+		if (!this.running) return;
+		if (this.page.hidden) {
+			this.clearTimer();
+			this.generation += 1;
+			return;
+		}
+		this.generation += 1;
+		this.schedule(0, this.generation);
+	}
+	schedule(delay, generation) {
+		this.clearTimer();
+		this.timer = window.setTimeout(() => {
+			this.timer = 0;
+			this.poll(generation);
+		}, delay);
+	}
+	async poll(generation) {
+		if (!this.running || this.page.hidden || generation !== this.generation) return;
+		let accessToken = await this.auth.accessToken();
+		if (!this.current(generation)) return;
+		if (!accessToken) {
+			this.onResult({ kind: "auth-required" });
+			this.stop();
+			return;
+		}
+		let result = await this.loadCurrentlyPlaying(accessToken);
+		if (!this.current(generation)) return;
+		if (result.kind === "unauthorized") {
+			accessToken = await this.auth.accessToken(true);
+			if (!this.current(generation)) return;
+			if (!accessToken) {
+				this.onResult({ kind: "auth-required" });
+				this.stop();
+				return;
+			}
+			result = await this.loadCurrentlyPlaying(accessToken);
+			if (!this.current(generation)) return;
+		}
+		this.onResult(result);
+		if (result.kind === "unauthorized") {
+			this.onResult({ kind: "auth-required" });
+			this.stop();
+			return;
+		}
+		this.schedule(result.kind === "rate-limited" ? result.retryAfterMs : POLL_INTERVAL_MS, generation);
+	}
+	current(generation) {
+		return this.running && !this.page.hidden && generation === this.generation;
+	}
+	clearTimer() {
+		if (this.timer) window.clearTimeout(this.timer);
+		this.timer = 0;
+	}
+};
+//#endregion
+//#region src/gm-prototype.ts
+var MODAL_TRANSITION_MS = 180;
+var GmPrototype = class {
+	root;
+	playerBoard;
+	shuffleButton;
+	shareButton;
+	verifyModeButton;
+	verifier;
+	verifierGrid;
+	verifierForm;
+	verifierInput;
+	verifierStatus;
+	calls;
+	search;
+	trackingButton;
+	historyButton;
+	historyModal;
+	historyPanel;
+	historyClose;
+	spotifyStatus;
+	artwork;
+	artworkFallback;
+	trackTitle;
+	trackArtists;
+	trackAlbum;
+	explicitBadge;
+	progressFill;
+	progressCurrent;
+	progressState;
+	progressDuration;
+	spotifyModal;
+	spotifyPanel;
+	spotifyForm;
+	spotifyClientId;
+	spotifyRedirectUri;
+	spotifyError;
+	spotifyCancel;
+	spotifyDisconnect;
+	spotifyAuth = new SpotifyAuth();
+	spotifyMonitor;
+	catalog = [];
+	catalogById = /* @__PURE__ */ new Map();
+	verifierOpen = false;
+	historyOpen = false;
+	spotifyOpen = false;
+	tracking = false;
+	modalCloseTimer = 0;
+	lastTrack = null;
+	constructor(root) {
+		this.root = root;
+		const shell = root.querySelector(".bingo-shell");
+		if (!shell) throw new Error("The Bingo shell must exist before GM mode is enabled.");
+		const actions = this.required(".actions");
+		this.playerBoard = this.required(".board");
+		this.shuffleButton = this.required(".shuffle-button");
+		this.shareButton = this.required(".share-button");
+		actions.insertAdjacentHTML("beforeend", actionMarkup());
+		shell.insertAdjacentHTML("beforeend", panelMarkup());
+		this.required(".board-card").insertAdjacentHTML("beforeend", verifierMarkup());
+		root.insertAdjacentHTML("beforeend", `${historyMarkup()}${spotifyMarkup()}`);
+		root.classList.add("gm-mode");
+		this.verifyModeButton = this.required(".gm-verify-mode-button");
+		this.verifier = this.required(".gm-verifier-stage");
+		this.verifierGrid = this.required(".gm-verifier-grid");
+		this.verifierForm = this.required(".gm-verifier-form");
+		this.verifierInput = this.required(".gm-verifier-input");
+		this.verifierStatus = this.required(".gm-verifier-status");
+		this.calls = this.required(".gm-call-list");
+		this.search = this.required(".gm-call-search");
+		this.trackingButton = this.required(".gm-tracking-button");
+		this.historyButton = this.required(".gm-history-button");
+		this.historyModal = this.required(".gm-history-modal");
+		this.historyPanel = this.required(".gm-history-panel");
+		this.historyClose = this.required(".gm-history-close");
+		this.spotifyStatus = this.required(".gm-spotify-status");
+		this.artwork = this.required(".gm-artwork");
+		this.artworkFallback = this.required(".gm-artwork-fallback");
+		this.trackTitle = this.required(".gm-track-title");
+		this.trackArtists = this.required(".gm-track-artists");
+		this.trackAlbum = this.required(".gm-track-album");
+		this.explicitBadge = this.required(".gm-explicit-badge");
+		this.progressFill = this.required(".gm-progress-placeholder span");
+		this.progressCurrent = this.required(".gm-progress-current");
+		this.progressState = this.required(".gm-progress-state");
+		this.progressDuration = this.required(".gm-progress-duration");
+		this.spotifyModal = this.required(".gm-spotify-modal");
+		this.spotifyPanel = this.required(".gm-spotify-panel");
+		this.spotifyForm = this.required(".gm-spotify-form");
+		this.spotifyClientId = this.required(".gm-spotify-client-id");
+		this.spotifyRedirectUri = this.required(".gm-spotify-redirect-uri");
+		this.spotifyError = this.required(".gm-spotify-error");
+		this.spotifyCancel = this.required(".gm-spotify-cancel");
+		this.spotifyDisconnect = this.required(".gm-spotify-disconnect");
+		this.spotifyMonitor = new SpotifyMonitor(this.spotifyAuth, (result) => this.handleSpotifyResult(result));
+		this.renderEmptyVerifier();
+		this.bind();
+		this.initializeSpotify();
+	}
+	setCatalog(catalog) {
+		this.catalog = catalog.filter(({ id }) => id !== FRIDAY_ID);
+		this.catalogById = new Map(catalog.map((tile) => [tile.id, tile]));
+		this.verifyModeButton.disabled = false;
+		this.renderCalls();
+	}
+	bind() {
+		this.search.addEventListener("input", () => this.renderCalls());
+		this.verifyModeButton.addEventListener("click", () => this.setVerifierOpen(!this.verifierOpen));
+		this.verifierForm.addEventListener("submit", (event) => {
+			event.preventDefault();
+			this.verifyIdentifier();
+		});
+		this.trackingButton.addEventListener("click", () => this.toggleTracking());
+		this.historyButton.addEventListener("click", () => this.openHistory());
+		this.historyClose.addEventListener("click", () => this.closeHistory());
+		this.historyModal.addEventListener("click", (event) => {
+			if (event.target === this.historyModal) this.closeHistory();
+		});
+		this.spotifyStatus.addEventListener("click", () => this.openSpotify());
+		this.spotifyCancel.addEventListener("click", () => this.closeSpotify());
+		this.spotifyDisconnect.addEventListener("click", () => this.disconnectSpotify());
+		this.spotifyModal.addEventListener("click", (event) => {
+			if (event.target === this.spotifyModal) this.closeSpotify();
+		});
+		this.spotifyForm.addEventListener("submit", (event) => {
+			event.preventDefault();
+			this.connectSpotify();
+		});
+		this.root.addEventListener("keydown", (event) => this.handleKeydown(event), true);
+		window.addEventListener("resize", () => {
+			if (this.verifierOpen) this.requestVerifierLabelFit();
+		});
+	}
+	setVerifierOpen(open) {
+		if (open === this.verifierOpen || open && !this.catalogById.size) return;
+		this.verifierOpen = open;
+		this.root.classList.toggle("gm-verifier-open", open);
+		this.playerBoard.hidden = open;
+		this.verifier.hidden = !open;
+		this.shuffleButton.disabled = open;
+		this.shareButton.disabled = open;
+		this.verifyModeButton.setAttribute("aria-pressed", String(open));
+		this.verifyModeButton.textContent = open ? "BOARD" : "VERIFY";
+		if (open) {
+			this.verifierInput.focus({ preventScroll: true });
+			this.requestVerifierLabelFit();
+			this.announce("Bingo verifier opened.");
+		} else {
+			this.shuffleButton.disabled = false;
+			this.shareButton.disabled = false;
+			this.verifyModeButton.focus({ preventScroll: true });
+			this.announce("Returned to your Bingo board.");
+		}
+	}
+	verifyIdentifier() {
+		const identifier = extractIdentifier(this.verifierInput.value);
+		const state = identifier ? decodeState(identifier, [...this.catalogById.values()]) : null;
+		if (!state) {
+			this.renderEmptyVerifier("INVALID BOARD IDENTIFIER", "invalid");
+			this.announce("The board identifier is invalid.");
+			return;
+		}
+		this.renderVerifiedBoard(state);
+	}
+	renderVerifiedBoard(state) {
+		const completedPositions = positionsForLines(state.completedLines);
+		const blackout = state.marked.size === 25;
+		const fragment = document.createDocumentFragment();
+		state.layout.forEach((id, index) => {
+			const tile = this.catalogById.get(id);
+			if (!tile) return;
+			const cell = document.createElement("span");
+			cell.className = "gm-verify-cell";
+			cell.classList.toggle("marked", state.marked.has(index));
+			cell.classList.toggle("in-completed-line", completedPositions.has(index));
+			const label = document.createElement("span");
+			label.className = "gm-verify-label";
+			label.textContent = index === 12 ? blackout ? "BLACKOUT" : state.completedLines.size ? "BINGO" : tile.label : tile.label;
+			cell.append(label);
+			fragment.append(cell);
+		});
+		this.verifierGrid.replaceChildren(fragment);
+		const lines = state.completedLines.size;
+		this.setVerifierStatus(blackout ? "BLACKOUT FOUND" : lines ? `${lines} BINGO ${lines === 1 ? "LINE" : "LINES"} FOUND` : "VALID BOARD — NO BINGO", blackout || lines ? "success" : "valid");
+		this.announce(blackout ? "Blackout found in the submitted board." : lines ? `${lines} completed Bingo ${lines === 1 ? "line" : "lines"} found in the submitted board.` : "The submitted board is valid but has no Bingo.");
+		this.requestVerifierLabelFit();
+	}
+	renderEmptyVerifier(message = "PASTE A BOARD IDENTIFIER", tone = "idle") {
+		const cells = Array.from({ length: 25 }, () => {
+			const cell = document.createElement("span");
+			cell.className = "gm-verify-cell empty";
+			return cell;
+		});
+		this.verifierGrid.replaceChildren(...cells);
+		this.setVerifierStatus(message, tone);
+	}
+	setVerifierStatus(message, tone) {
+		this.verifierStatus.textContent = message;
+		this.verifierStatus.dataset.tone = tone;
+	}
+	renderCalls() {
+		const query = this.search.value.trim().toLocaleLowerCase();
+		const visible = query ? this.catalog.filter(({ label }) => label.toLocaleLowerCase().includes(query)) : this.catalog;
+		if (!visible.length) {
+			const empty = document.createElement("p");
+			empty.className = "gm-empty";
+			empty.textContent = "NO MATCHING CALLS";
+			this.calls.replaceChildren(empty);
+			return;
+		}
+		this.calls.replaceChildren(...visible.map(({ id, label }) => {
+			const call = document.createElement("button");
+			call.type = "button";
+			call.className = "gm-call";
+			call.dataset.callId = id;
+			call.textContent = label;
+			call.disabled = true;
+			call.title = "A playing song is required before calls can be recorded.";
+			return call;
+		}));
+	}
+	toggleTracking() {
+		this.tracking = !this.tracking;
+		this.trackingButton.textContent = this.tracking ? "STOP TRACKING" : "START TRACKING";
+		this.trackingButton.setAttribute("aria-pressed", String(this.tracking));
+		this.root.classList.toggle("gm-is-tracking", this.tracking);
+		this.announce(this.tracking ? "Session tracking started. Waiting for a Spotify track." : "Session tracking stopped.");
+	}
+	async initializeSpotify() {
+		const callback = await this.spotifyAuth.completeCallback(window.location.search);
+		if (callback.kind !== "none") try {
+			window.history.replaceState(null, "", cleanSpotifyCallbackUrl());
+		} catch {}
+		if (callback.kind === "error") {
+			this.setSpotifyStatus("CONNECT", "disconnected");
+			this.openSpotify(callback.message);
+			this.announce(callback.message);
+			return;
+		}
+		if (this.spotifyAuth.isConnected()) {
+			this.setSpotifyStatus("CONNECTING", "connecting");
+			this.spotifyMonitor.start();
+			if (callback.kind === "connected") this.announce("Spotify connected.");
+			return;
+		}
+		this.setSpotifyStatus(this.spotifyAuth.loadConfig() ? "CONNECT" : "SET UP", "disconnected");
+	}
+	openSpotify(message = "") {
+		if (this.spotifyOpen || this.historyOpen) return;
+		if (this.modalCloseTimer) window.clearTimeout(this.modalCloseTimer);
+		this.modalCloseTimer = 0;
+		const config = this.spotifyAuth.loadConfig();
+		this.spotifyClientId.value = config?.clientId ?? "";
+		this.spotifyRedirectUri.value = currentSpotifyRedirectUri();
+		this.spotifyError.textContent = message;
+		this.spotifyDisconnect.hidden = !this.spotifyAuth.isConnected();
+		this.spotifyOpen = true;
+		this.root.classList.add("gm-spotify-open");
+		this.spotifyModal.setAttribute("aria-hidden", "false");
+		this.spotifyStatus.setAttribute("aria-expanded", "true");
+		this.spotifyPanel.focus({ preventScroll: true });
+		requestAnimationFrame(() => {
+			if (!this.spotifyOpen) return;
+			this.root.classList.add("gm-spotify-visible");
+			window.setTimeout(() => {
+				if (this.spotifyOpen) this.spotifyClientId.focus({ preventScroll: true });
+			}, MODAL_TRANSITION_MS);
+		});
+	}
+	closeSpotify() {
+		if (!this.spotifyOpen) return;
+		this.spotifyOpen = false;
+		this.root.classList.remove("gm-spotify-visible");
+		this.spotifyModal.setAttribute("aria-hidden", "true");
+		this.spotifyStatus.setAttribute("aria-expanded", "false");
+		const finish = () => {
+			this.modalCloseTimer = 0;
+			this.root.classList.remove("gm-spotify-open");
+			this.spotifyStatus.focus({ preventScroll: true });
+		};
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) finish();
+		else this.modalCloseTimer = window.setTimeout(finish, MODAL_TRANSITION_MS);
+	}
+	async connectSpotify() {
+		this.spotifyError.textContent = "";
+		const config = this.spotifyAuth.saveConfig(this.spotifyClientId.value, this.spotifyRedirectUri.value);
+		if (!config) {
+			this.spotifyError.textContent = "ENTER A VALID SPOTIFY CLIENT ID.";
+			this.spotifyClientId.focus({ preventScroll: true });
+			return;
+		}
+		const authorizationUrl = await this.spotifyAuth.createAuthorizationUrl(config);
+		if (!authorizationUrl) {
+			this.spotifyError.textContent = "AUTHORIZATION COULD NOT BE STARTED IN THIS BROWSER.";
+			return;
+		}
+		window.location.assign(authorizationUrl);
+	}
+	disconnectSpotify() {
+		this.spotifyMonitor.stop();
+		this.spotifyAuth.disconnect();
+		this.setSpotifyStatus("CONNECT", "disconnected");
+		this.closeSpotify();
+		this.announce("Spotify disconnected.");
+	}
+	handleSpotifyResult(result) {
+		switch (result.kind) {
+			case "track":
+				this.renderSpotifyTrack(result.track);
+				this.setSpotifyStatus(result.track.isPlaying ? "CONNECTED" : "PAUSED", "connected");
+				return;
+			case "empty":
+				this.setSpotifyStatus("IDLE", "connected");
+				if (!this.lastTrack) {
+					this.trackTitle.textContent = "NOTHING PLAYING";
+					this.trackArtists.textContent = "Start a track in Spotify to display it here.";
+				}
+				return;
+			case "rate-limited":
+				this.setSpotifyStatus("WAITING", "waiting");
+				return;
+			case "network-error":
+			case "unavailable":
+				this.setSpotifyStatus("RETRYING", "waiting");
+				return;
+			case "unauthorized":
+			case "auth-required":
+				this.setSpotifyStatus("CONNECT", "disconnected");
+				return;
+		}
+	}
+	renderSpotifyTrack(track) {
+		this.lastTrack = track;
+		if (track.artworkUrl) {
+			this.artwork.src = track.artworkUrl;
+			this.artwork.alt = `${track.album} artwork`;
+			this.artwork.hidden = false;
+			this.artworkFallback.hidden = true;
+		} else {
+			this.artwork.removeAttribute("src");
+			this.artwork.alt = "";
+			this.artwork.hidden = true;
+			this.artworkFallback.hidden = false;
+		}
+		this.trackTitle.textContent = track.title;
+		if (track.spotifyUrl) {
+			this.trackTitle.href = track.spotifyUrl;
+			this.trackTitle.target = "_blank";
+			this.trackTitle.rel = "noreferrer";
+		} else {
+			this.trackTitle.removeAttribute("href");
+			this.trackTitle.removeAttribute("target");
+			this.trackTitle.removeAttribute("rel");
+		}
+		this.trackArtists.textContent = track.artists;
+		this.trackAlbum.textContent = track.album;
+		this.explicitBadge.hidden = !track.explicit;
+		const progress = track.durationMs > 0 ? track.progressMs / track.durationMs * 100 : 0;
+		this.progressFill.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+		this.progressCurrent.textContent = formatTime(track.progressMs);
+		this.progressState.textContent = track.isPlaying ? "PLAYING" : "PAUSED";
+		this.progressDuration.textContent = formatTime(track.durationMs);
+	}
+	setSpotifyStatus(text, state) {
+		this.spotifyStatus.textContent = text;
+		this.spotifyStatus.dataset.state = state;
+		this.root.classList.toggle("gm-spotify-connected", state === "connected");
+	}
+	openHistory() {
+		if (this.historyOpen) return;
+		if (this.modalCloseTimer) window.clearTimeout(this.modalCloseTimer);
+		this.modalCloseTimer = 0;
+		this.historyOpen = true;
+		this.root.classList.add("gm-history-open");
+		this.historyModal.setAttribute("aria-hidden", "false");
+		this.historyButton.setAttribute("aria-expanded", "true");
+		this.historyPanel.focus({ preventScroll: true });
+		requestAnimationFrame(() => {
+			if (!this.historyOpen) return;
+			this.root.classList.add("gm-history-visible");
+			window.setTimeout(() => {
+				if (this.historyOpen) this.historyClose.focus({ preventScroll: true });
+			}, MODAL_TRANSITION_MS);
+		});
+	}
+	closeHistory() {
+		if (!this.historyOpen) return;
+		this.historyOpen = false;
+		this.root.classList.remove("gm-history-visible");
+		this.historyModal.setAttribute("aria-hidden", "true");
+		this.historyButton.setAttribute("aria-expanded", "false");
+		const finish = () => {
+			this.modalCloseTimer = 0;
+			this.root.classList.remove("gm-history-open");
+			this.historyButton.focus({ preventScroll: true });
+		};
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) finish();
+		else this.modalCloseTimer = window.setTimeout(finish, MODAL_TRANSITION_MS);
+	}
+	handleKeydown(event) {
+		if (this.spotifyOpen) {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				this.closeSpotify();
+			} else this.trapModalFocus(event, this.spotifyPanel);
+			return;
+		}
+		if (!this.historyOpen) return;
+		if (event.key === "Escape") {
+			event.preventDefault();
+			this.closeHistory();
+			return;
+		}
+		this.trapModalFocus(event, this.historyPanel);
+	}
+	trapModalFocus(event, panel) {
+		if (event.key !== "Tab") return;
+		const focusable = [...panel.querySelectorAll("button:not([disabled]), input:not([disabled])")].filter((element) => !element.hidden);
+		const first = focusable[0];
+		const last = focusable.at(-1);
+		if (!first || !last) return;
+		if (!panel.contains(document.activeElement)) {
+			event.preventDefault();
+			(event.shiftKey ? last : first).focus();
+		} else if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+	requestVerifierLabelFit() {
+		requestAnimationFrame(() => this.fitVerifierLabels());
+	}
+	fitVerifierLabels() {
+		for (const label of this.verifierGrid.querySelectorAll(".gm-verify-label")) {
+			const cell = label.parentElement;
+			if (!cell || cell.clientWidth <= 0 || cell.clientHeight <= 0) continue;
+			const availableWidth = cell.clientWidth - 12;
+			const availableHeight = cell.clientHeight - 12;
+			let low = 6;
+			let high = Math.min(availableWidth, availableHeight);
+			label.style.width = `${availableWidth}px`;
+			for (let attempt = 0; attempt < 9; attempt += 1) {
+				const candidate = (low + high) / 2;
+				label.style.fontSize = `${candidate}px`;
+				if (label.scrollWidth <= availableWidth + .5 && label.scrollHeight <= availableHeight + .5) low = candidate;
+				else high = candidate;
+			}
+			label.style.fontSize = `${Math.floor(low * 10) / 10}px`;
+		}
+	}
+	announce(message) {
+		const region = this.root.querySelector(".live-region");
+		if (!region) return;
+		region.textContent = "";
+		requestAnimationFrame(() => {
+			region.textContent = message;
+		});
+	}
+	required(selector) {
+		const element = this.root.querySelector(selector);
+		if (!element) throw new Error(`Missing GM prototype element: ${selector}`);
+		return element;
+	}
+};
+function extractIdentifier(value) {
+	const trimmed = value.trim();
+	if (!trimmed) return "";
+	try {
+		const url = new URL(trimmed, window.location.href);
+		const board = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash).get("board");
+		if (board) return board;
+	} catch {}
+	if (trimmed.startsWith("#")) return new URLSearchParams(trimmed.slice(1)).get("board") ?? trimmed;
+	return trimmed;
+}
+function formatTime(milliseconds) {
+	const seconds = Math.max(0, Math.floor(milliseconds / 1e3));
+	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function actionMarkup() {
+	return `<button class="button gm-verify-mode-button" type="button" aria-pressed="false" disabled>VERIFY</button>`;
+}
+function panelMarkup() {
+	return `
+    <aside class="gm-side gm-now-playing glass" aria-label="Spotify and session">
+      <header class="gm-panel-heading">
+        <span><small>SPOTIFY</small><strong>NOW PLAYING</strong></span>
+        <button class="gm-spotify-status" type="button" data-state="disconnected" aria-haspopup="dialog" aria-expanded="false">SET UP</button>
+      </header>
+      <div class="gm-artwork-placeholder">
+        <img class="gm-artwork" alt="" hidden>
+        <span class="gm-artwork-fallback" aria-hidden="true">✦</span>
+      </div>
+      <div class="gm-track-placeholder">
+        <span class="gm-track-heading"><a class="gm-track-title">NO TRACK DETECTED</a><small class="gm-explicit-badge" hidden>EXPLICIT</small></span>
+        <span class="gm-track-artists">Connect Spotify to display the current release.</span>
+        <span class="gm-track-album"></span>
+      </div>
+      <div class="gm-progress-placeholder"><span></span></div>
+      <div class="gm-track-stats"><span class="gm-progress-current">0:00</span><span class="gm-progress-state">SONG —</span><span class="gm-progress-duration">0:00</span></div>
+      <footer class="gm-session-controls">
+        <button class="gm-control gm-control-primary gm-tracking-button" type="button" aria-pressed="false">START TRACKING</button>
+        <button class="gm-control gm-history-button" type="button" aria-haspopup="dialog" aria-expanded="false">HISTORY</button>
+      </footer>
+    </aside>
+    <aside class="gm-side gm-calls-panel glass" aria-label="Calls">
+      <header class="gm-panel-heading">
+        <span><small>SELECTED SONG</small><strong>CALLS</strong></span>
+        <em>NO SONG</em>
+      </header>
+      <label class="gm-search">
+        <span class="sr-only">Search calls</span>
+        <input class="gm-call-search" type="search" placeholder="SEARCH CALLS…" autocomplete="off">
+        <span aria-hidden="true">⌕</span>
+      </label>
+      <div class="gm-call-list"><p class="gm-empty">LOADING CALLS…</p></div>
+    </aside>`;
+}
+function verifierMarkup() {
+	return `
+    <section class="gm-verifier-stage" aria-label="Bingo verifier" hidden>
+      <div class="gm-verifier-grid" role="img" aria-label="Submitted Bingo board"></div>
+      <form class="gm-verifier-form">
+        <label><span class="sr-only">Board identifier or URL</span><input class="gm-verifier-input" type="text" placeholder="BOARD IDENTIFIER OR URL…" autocomplete="off"></label>
+        <button class="button gm-verify-submit" type="submit">CHECK</button>
+        <p class="gm-verifier-status" data-tone="idle" aria-live="polite"></p>
+      </form>
+    </section>`;
+}
+function historyMarkup() {
+	return `
+    <div class="gm-history-modal" aria-hidden="true">
+      <section class="gm-history-panel glass" role="dialog" aria-modal="true" aria-labelledby="gm-history-title" tabindex="-1">
+        <header class="gm-history-title">
+          <span><small>CURRENT SESSION</small><strong id="gm-history-title">SONG HISTORY</strong></span>
+          <em>0 SONGS</em>
+        </header>
+        <div class="gm-history-columns"><span>#</span><span>ARTIST / TITLE</span><span>CALLS</span></div>
+        <p class="gm-history-empty">START TRACKING TO BUILD THE SESSION HISTORY</p>
+        <div class="gm-history-actions">
+          <button class="button gm-history-close" type="button">CLOSE</button>
+        </div>
+      </section>
+    </div>`;
+}
+function spotifyMarkup() {
+	return `
+    <div class="gm-spotify-modal" aria-hidden="true">
+      <section class="gm-spotify-panel glass" role="dialog" aria-modal="true" aria-labelledby="gm-spotify-title" aria-describedby="gm-spotify-description" tabindex="-1">
+        <header class="gm-spotify-title">
+          <small>ONE-TIME SETUP</small>
+          <strong id="gm-spotify-title">CONNECT SPOTIFY</strong>
+        </header>
+        <p id="gm-spotify-description">CREATE A SPOTIFY DEVELOPER APP, THEN ENTER ITS PUBLIC CLIENT ID. THE CLIENT SECRET IS NEVER USED.</p>
+        <form class="gm-spotify-form">
+          <label><span>CLIENT ID</span><input class="gm-spotify-client-id" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="SPOTIFY CLIENT ID" required></label>
+          <label><span>REDIRECT URI</span><input class="gm-spotify-redirect-uri" type="url" readonly></label>
+          <p class="gm-spotify-hint">ADD THIS EXACT REDIRECT URI TO YOUR SPOTIFY APP SETTINGS.</p>
+          <p class="gm-spotify-error" role="alert"></p>
+          <div class="gm-spotify-actions">
+            <button class="button gm-spotify-cancel" type="button">CANCEL</button>
+            <button class="button gm-spotify-disconnect" type="button" hidden>DISCONNECT</button>
+            <button class="button gm-spotify-connect" type="submit">SAVE &amp; CONNECT</button>
+          </div>
+        </form>
+      </section>
+    </div>`;
 }
 //#endregion
 //#region src/storage.ts
@@ -707,9 +1688,11 @@ function markup() {
 //#endregion
 //#region src/main.ts
 var root = document.querySelector("#release-radar-bingo");
+var gmMode = new URLSearchParams(window.location.search).get("gm") === "1";
 if (root && !root.dataset.bingoReady) {
 	root.dataset.bingoReady = "true";
 	const view = new BingoView(root);
+	const gmPrototype = gmMode ? new GmPrototype(root) : null;
 	const storage = new BoardStorage();
 	let catalog = [];
 	let state = null;
@@ -736,6 +1719,7 @@ if (root && !root.dataset.bingoReady) {
 			view.showFailure();
 			return;
 		}
+		gmPrototype?.setCatalog(catalog);
 		const shared = readBoardHash(window.location.hash, catalog);
 		let announcement = "";
 		if (shared.kind === "valid") {

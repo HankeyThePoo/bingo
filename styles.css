@@ -12,6 +12,12 @@ body {
 
 #release-radar-bingo {
   --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
+  --gradient-background-soft: linear-gradient(
+    135deg,
+    rgba(73, 241, 250, 0.12),
+    rgba(123, 176, 247, 0.12) 50%,
+    rgba(141, 100, 245, 0.12)
+  );
   --near-black: #101010;
   --off-white: #f7f7f7;
   --line: rgba(247, 247, 247, 0.14);
@@ -214,6 +220,15 @@ body {
   opacity: 1;
 }
 
+#release-radar-bingo .tile.in-completed-line::after {
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--gradient);
+  opacity: 1;
+  animation: none;
+}
+
 #release-radar-bingo .tile-inner {
   display: block;
   position: relative;
@@ -253,6 +268,10 @@ body {
   background: var(--off-white);
   color: var(--near-black);
   transform: rotateY(180deg);
+  transition:
+    background-color 420ms ease,
+    color 420ms ease,
+    filter 0.18s ease;
 }
 
 #release-radar-bingo .tile-back::before {
@@ -260,7 +279,7 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--gradient);
+  background: var(--gradient-background-soft);
   opacity: 0;
   pointer-events: none;
   transition: opacity 420ms ease;
@@ -268,6 +287,11 @@ body {
 
 #release-radar-bingo .tile.in-completed-line .tile-back::before {
   opacity: 1;
+}
+
+#release-radar-bingo .tile.in-completed-line .tile-back {
+  background-color: var(--near-black);
+  color: var(--off-white);
 }
 
 #release-radar-bingo .tile-back::after {
@@ -285,6 +309,7 @@ body {
 }
 
 #release-radar-bingo .tile.in-completed-line .tile-back::after {
+  color: rgba(247, 247, 247, 0.72);
   opacity: 1;
 }
 

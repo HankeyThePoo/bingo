@@ -11,20 +11,39 @@ body {
 }
 
 #release-radar-bingo {
+  --off-white: #F7F7F7;
+  --near-black: #101010;
   --gradient: linear-gradient(135deg, #49f1fa, #7bb0f7 50%, #8d64f5);
   --gradient-background-soft: linear-gradient(
     135deg,
-    rgba(73, 241, 250, 0.12),
-    rgba(123, 176, 247, 0.12) 50%,
-    rgba(141, 100, 245, 0.12)
+    rgb(73 241 250 / 12%),
+    rgb(123 176 247 / 12%) 50%,
+    rgb(141 100 245 / 12%)
   );
-  --near-black: #101010;
-  --off-white: #f7f7f7;
-  --line: rgba(247, 247, 247, 0.14);
-  --duration-rewind: 200ms;
+  --surface-glass: rgb(247 247 247 / 2%);
+  --surface-interactive: rgb(247 247 247 / 20%);
+  --surface-dark: rgb(16 16 16 / 40%);
+  --line: rgb(247 247 247 / 20%);
+  --line-width: 1px;
+  --gradient-border-width: 2px;
+  --scrim: rgb(16 16 16 / 50%);
+  --glass-blur: 20px;
+  --shadow-surface: 0 6px 18px rgb(16 16 16 / 30%);
+  --radius: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --text-display: 2rem;
+  --text-body: 0.88rem;
+  --tracking-control: 0.04em;
+  --tracking-label: 0.08em;
+  --opacity-muted: 70%;
+  --duration-fast: 160ms;
+  --duration-share-fade: 200ms;
   height: 100dvh;
   min-height: 0;
-  padding: 1rem 12px 3rem;
+  padding: var(--space-4) var(--space-3) 3rem;
   overflow: clip;
   box-sizing: border-box;
   color: var(--off-white);
@@ -38,17 +57,19 @@ body {
 }
 
 #release-radar-bingo .bingo-shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: max-content max-content minmax(0, 1fr);
+  gap: var(--space-4);
   height: 100%;
   min-height: 0;
-  max-width: 980px;
+  max-width: 1100px;
   margin: auto;
 }
 
 #release-radar-bingo h1 {
-  margin: 1rem 0 2rem;
-  font-size: 2rem;
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-display);
+  line-height: 1;
   text-align: center;
 }
 
@@ -71,18 +92,16 @@ body {
 #release-radar-bingo .confirmation-actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 #release-radar-bingo .actions {
-  flex: none;
   max-width: 720px;
-  margin: -1rem auto 1rem;
+  margin: 0 auto;
 }
 
 #release-radar-bingo .board-stage {
   display: grid;
-  flex: 1 1 0;
   min-height: 0;
   place-items: start center;
   container-type: size;
@@ -94,26 +113,26 @@ body {
   align-items: center;
   justify-content: center;
   width: 128px;
-  height: 42px;
+  height: 40px;
   padding: 0 16px;
-  border: 1px solid var(--off-white);
-  border-radius: 2px;
-  background: var(--off-white);
-  color: var(--near-black);
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--line-width) var(--line);
+  color: var(--off-white);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--text-body);
   font-weight: 800;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-control);
   text-transform: uppercase;
   transition:
-    filter 0.18s ease,
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    filter var(--duration-fast) ease,
+    opacity var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
 }
 
 #release-radar-bingo .share-label {
   opacity: 1;
-  transition: opacity var(--duration-rewind) ease;
+  transition: opacity var(--duration-share-fade) ease;
 }
 
 #release-radar-bingo .share-label.fading {
@@ -124,19 +143,19 @@ body {
 #release-radar-bingo .tile::after {
   content: "";
   position: absolute;
-  padding: 2px;
-  background: var(--off-white);
+  padding: var(--gradient-border-width);
+  border-radius: var(--radius);
+  background: var(--gradient);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s ease;
+  transition: opacity var(--duration-fast) ease;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
 
 #release-radar-bingo .button::after {
-  inset: -4px;
-  border-radius: 3px;
+  inset: 0;
 }
 
 #release-radar-bingo.keyboard-input .button:focus::after,
@@ -146,24 +165,21 @@ body {
 
 #release-radar-bingo .glass {
   position: relative;
-  border-radius: 2px;
+  isolation: isolate;
+  border-radius: var(--radius);
 }
 
 #release-radar-bingo .glass::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
-  border: 1px solid var(--line);
+  z-index: -1;
+  border: var(--line-width) solid var(--line);
   border-radius: inherit;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
-}
-
-#release-radar-bingo .glass > * {
-  position: relative;
-  z-index: 1;
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-surface);
+  pointer-events: none;
 }
 
 #release-radar-bingo .board-card {
@@ -177,8 +193,8 @@ body {
   place-items: center;
   aspect-ratio: 1;
   margin: 0;
-  color: rgba(247, 247, 247, 0.72);
-  font-size: 0.85rem;
+  color: rgb(247 247 247 / var(--opacity-muted));
+  font-size: var(--text-body);
   font-weight: 800;
   letter-spacing: 0.05em;
   text-align: center;
@@ -187,7 +203,7 @@ body {
 #release-radar-bingo .board {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: var(--space-2);
   aspect-ratio: 1;
 }
 
@@ -196,7 +212,7 @@ body {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  border-radius: 2px;
+  border-radius: var(--radius);
   appearance: none;
   background: transparent;
   color: var(--off-white);
@@ -206,9 +222,8 @@ body {
 }
 
 #release-radar-bingo .tile::after {
-  inset: -2px;
+  inset: 0;
   z-index: 3;
-  border-radius: 3px;
 }
 
 #release-radar-bingo .tile.winning-opportunity::after {
@@ -222,7 +237,7 @@ body {
 
 #release-radar-bingo .tile.in-completed-line::after {
   inset: 0;
-  padding: 1px;
+  padding: var(--gradient-border-width);
   border-radius: inherit;
   background: var(--gradient);
   opacity: 1;
@@ -251,22 +266,23 @@ body {
   min-height: 0;
   padding: 8px;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: var(--radius);
   backface-visibility: hidden;
   font-weight: 800;
   line-height: 1.06;
   text-align: center;
-  transition: filter 0.18s ease;
+  transition: filter var(--duration-fast) ease;
 }
 
 #release-radar-bingo .tile-front {
-  border: 1px solid var(--line);
-  background: rgba(16, 16, 16, 0.78);
+  background: var(--surface-dark);
+  box-shadow: inset 0 0 0 var(--line-width) var(--line);
 }
 
 #release-radar-bingo .tile-back {
-  background: var(--off-white);
-  color: var(--near-black);
+  background: var(--surface-interactive);
+  box-shadow: inset 0 0 0 var(--line-width) var(--line);
+  color: var(--off-white);
   transform: rotateY(180deg);
   transition:
     background-color 420ms ease,
@@ -290,7 +306,7 @@ body {
 }
 
 #release-radar-bingo .tile.in-completed-line .tile-back {
-  background-color: var(--near-black);
+  background-color: var(--surface-dark);
   color: var(--off-white);
 }
 
@@ -300,7 +316,7 @@ body {
   top: 7px;
   right: 8px;
   z-index: 2;
-  color: rgba(16, 16, 16, 0.72);
+  color: rgb(247 247 247 / 72%);
   font-size: clamp(9px, 1.4vw, 13px);
   line-height: 1;
   opacity: 0;
@@ -309,7 +325,6 @@ body {
 }
 
 #release-radar-bingo .tile.in-completed-line .tile-back::after {
-  color: rgba(247, 247, 247, 0.72);
   opacity: 1;
 }
 
@@ -362,7 +377,7 @@ body {
   justify-content: center;
   padding: 16px;
   border-radius: inherit;
-  background: rgba(0, 0, 0, 0.64);
+  background: var(--scrim);
 }
 
 #release-radar-bingo .shuffle-confirmation[hidden] {
@@ -372,25 +387,25 @@ body {
 #release-radar-bingo .confirmation-panel {
   display: grid;
   width: min(100%, 430px);
-  gap: 0.55rem;
-  padding: 1.2rem;
+  gap: var(--space-2);
+  padding: var(--space-4);
   text-align: center;
   text-transform: uppercase;
 }
 
 #release-radar-bingo .confirmation-panel strong {
   font-size: 0.95rem;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-label);
 }
 
 #release-radar-bingo .confirmation-panel > span {
   font-size: 0.68rem;
   line-height: 1.35;
-  opacity: 0.72;
+  opacity: var(--opacity-muted);
 }
 
 #release-radar-bingo .confirmation-actions {
-  margin-top: 0.35rem;
+  margin-top: var(--space-1);
 }
 
 #release-radar-bingo .sr-only {
@@ -455,21 +470,21 @@ body {
   0%,
   100% {
     border-color: var(--line);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+    box-shadow: var(--shadow-surface);
   }
 
   22% {
     border-color: rgba(73, 241, 250, 0.58);
     box-shadow:
-      0 0 var(--celebration-cyan-glow, 34px) var(--celebration-cyan-color, rgba(73, 241, 250, 0.34)),
-      0 6px 18px rgba(0, 0, 0, 0.34);
+      0 0 var(--celebration-cyan-glow, 34px) var(--celebration-cyan-color, rgb(73 241 250 / 34%)),
+      var(--shadow-surface);
   }
 
   58% {
     border-color: rgba(141, 100, 245, 0.58);
     box-shadow:
-      0 0 var(--celebration-purple-glow, 38px) var(--celebration-purple-color, rgba(141, 100, 245, 0.36)),
-      0 6px 18px rgba(0, 0, 0, 0.34);
+      0 0 var(--celebration-purple-glow, 38px) var(--celebration-purple-color, rgb(141 100 245 / 36%)),
+      var(--shadow-surface);
   }
 }
 
@@ -479,11 +494,11 @@ body {
   }
 
   #release-radar-bingo .button:not(:disabled):hover {
-    filter: brightness(0.92);
+    filter: brightness(1.18);
   }
 
   #release-radar-bingo .tile:hover .tile-face {
-    filter: brightness(1.08);
+    filter: brightness(1.16);
   }
 
   #release-radar-bingo .tile.winning-opportunity:hover::after {
@@ -503,15 +518,6 @@ body {
 
   #release-radar-bingo .board {
     gap: 4px;
-  }
-
-  #release-radar-bingo .tile,
-  #release-radar-bingo .tile-face {
-    border-radius: 2px;
-  }
-
-  #release-radar-bingo .tile::after {
-    border-radius: 3px;
   }
 
   #release-radar-bingo .tile-face {
@@ -561,7 +567,7 @@ body {
 
   #release-radar-bingo .tile.winning-opportunity::after {
     animation: none !important;
-    opacity: 0.4;
+    opacity: 1;
   }
 }
 
@@ -596,4 +602,3 @@ body {
     outline-offset: 3px;
   }
 }
-/*$vite$:1*/

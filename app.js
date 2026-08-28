@@ -451,7 +451,7 @@ var BoardStorage = class {
 var CatalogSource = class {
 	url;
 	request;
-	constructor(url, request = fetch) {
+	constructor(url, request = (...args) => fetch(...args)) {
 		this.url = url;
 		this.request = request;
 	}

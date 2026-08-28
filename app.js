@@ -1,4 +1,3 @@
-//#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -159,15 +158,6 @@ function hasExactKeys$1(value, expected) {
 	const sortedExpected = [...expected].sort();
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
-//#endregion
-//#region src/catalog-source.ts
-async function loadCatalog(url, request = fetch) {
-	const response = await request(url, { cache: "no-cache" });
-	if (!response.ok) throw new Error(`Tile catalog request failed: ${response.status}`);
-	return parseCatalog(await response.json());
-}
-//#endregion
-//#region src/snapshot.ts
 var MAX_MARKED_MASK = 2 ** 25 - 1;
 var COMPACT_LAYOUT_CELLS = 24;
 var COMPACT_MARK_BITS = BigInt(COMPACT_LAYOUT_CELLS);
@@ -303,8 +293,130 @@ function hasExactKeys(value, expected) {
 	const sortedExpected = [...expected].sort();
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
-//#endregion
-//#region src/storage.ts
+var BingoController = class {
+	catalogSource;
+	storage;
+	location;
+	clipboard;
+	view;
+	random;
+	catalog = [];
+	state = null;
+	persistenceFailureAnnounced = false;
+	constructor(catalogSource, storage, location, clipboard, view, random = Math.random) {
+		this.catalogSource = catalogSource;
+		this.storage = storage;
+		this.location = location;
+		this.clipboard = clipboard;
+		this.view = view;
+		this.random = random;
+	}
+	start() {
+		this.view.bind({
+			shuffle: () => this.requestShuffle(),
+			confirmShuffle: () => this.shuffleBoard(),
+			share: () => void this.shareBoard(),
+			toggleTile: (index) => this.markTile(index)
+		});
+		this.location.subscribe(() => this.restoreSharedBoard());
+		this.bootstrap();
+	}
+	async bootstrap() {
+		try {
+			this.catalog = await this.catalogSource.load();
+		} catch {
+			this.view.showFailure();
+			return;
+		}
+		const shared = this.location.read(this.catalog);
+		let announcement = "";
+		if (shared.kind === "valid") {
+			this.state = shared.state;
+			announcement = "A shared Release Radar board was loaded.";
+		} else {
+			const saved = this.storage.load(this.catalog);
+			this.state = saved ?? createState(generateBoard(this.catalog, this.random));
+			if (shared.kind === "invalid") {
+				announcement = saved ? "The shared board link was invalid. Your saved board was restored." : "The shared board link was invalid. A new board was created.";
+				this.location.clearBoardHash();
+			}
+		}
+		announcement = this.saveWithAnnouncement(announcement);
+		this.view.showReady(this.catalog, this.state);
+		if (announcement) this.view.announce(announcement);
+	}
+	requestShuffle() {
+		if (!this.state) return;
+		if (hasManualMarks(this.state)) this.view.showShuffleConfirmation();
+		else this.shuffleBoard();
+	}
+	markTile(index) {
+		if (!this.state) return;
+		if (index === 12) {
+			this.view.announceFreeTile(this.state);
+			return;
+		}
+		const tile = this.catalog.find(({ id }) => id === this.state?.layout[index]);
+		if (!tile) return;
+		const result = toggleTile(this.state, index);
+		this.state = result.state;
+		this.view.updateState(this.state, result.newlyCompletedLineIds);
+		const marked = this.state.marked.has(index);
+		const announcement = result.newlyCompletedLineIds.length ? `Bingo! ${result.newlyCompletedLineIds.length === 1 ? "One line" : `${result.newlyCompletedLineIds.length} lines`} completed.` : `${tile.label} ${marked ? "marked" : "unmarked"}.`;
+		this.view.announce(this.saveWithAnnouncement(announcement));
+	}
+	shuffleBoard() {
+		if (!this.state) return;
+		this.state = createState(generateBoard(this.catalog, this.random));
+		this.view.renderBoard(this.state, true);
+		this.view.announce(this.saveWithAnnouncement("A new Release Radar board was shuffled."));
+	}
+	async shareBoard() {
+		if (!this.state) return;
+		const copied = await this.clipboard.copy(encodeState(this.state, this.catalog));
+		if (copied) this.view.showShareCopied();
+		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
+	}
+	restoreSharedBoard() {
+		if (!this.state || this.catalog.length === 0) return;
+		const shared = this.location.read(this.catalog);
+		if (shared.kind === "none") return;
+		if (shared.kind === "invalid") {
+			this.location.clearBoardHash();
+			this.view.announce("The shared board link was invalid. Your current board was kept.");
+			return;
+		}
+		this.state = shared.state;
+		this.view.renderBoard(this.state, true);
+		this.view.announce(this.saveWithAnnouncement("A shared Release Radar board was loaded."));
+	}
+	saveWithAnnouncement(announcement) {
+		if (!this.state || this.storage.save(this.state) || this.persistenceFailureAnnounced) return announcement;
+		this.persistenceFailureAnnounced = true;
+		return [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
+	}
+};
+var BoardLocation = class {
+	target;
+	constructor(target = window) {
+		this.target = target;
+	}
+	read(catalog) {
+		return readBoardHash(this.target.location.hash, catalog);
+	}
+	clearBoardHash() {
+		try {
+			const url = new URL(this.target.location.href);
+			const params = new URLSearchParams(url.hash.slice(1));
+			params.delete("board");
+			url.hash = params.toString();
+			this.target.history.replaceState(null, "", url);
+		} catch {}
+	}
+	subscribe(listener) {
+		this.target.addEventListener("hashchange", listener);
+	}
+};
 var STORAGE_KEY = "release-radar-bingo:board";
 function browserStorage() {
 	try {
@@ -320,10 +432,8 @@ var BoardStorage = class {
 	}
 	load(catalog) {
 		try {
-			if (!this.storage) return null;
-			const stored = this.storage.getItem(STORAGE_KEY);
-			if (stored === null) return null;
-			return parseSnapshot(JSON.parse(stored), catalog);
+			const stored = this.storage?.getItem(STORAGE_KEY);
+			return stored ? parseSnapshot(JSON.parse(stored), catalog) : null;
 		} catch {
 			return null;
 		}
@@ -338,14 +448,47 @@ var BoardStorage = class {
 		}
 	}
 };
-//#endregion
-//#region src/view.ts
+var CatalogSource = class {
+	url;
+	request;
+	constructor(url, request = fetch) {
+		this.url = url;
+		this.request = request;
+	}
+	async load() {
+		const response = await this.request(this.url, { cache: "no-cache" });
+		if (!response.ok) throw new Error(`Tile catalog request failed: ${response.status}`);
+		return parseCatalog(await response.json());
+	}
+};
+var ShareClipboard = class {
+	target;
+	constructor(target = navigator) {
+		this.target = target;
+	}
+	async copy(text) {
+		try {
+			if (!this.target.clipboard) return false;
+			await this.target.clipboard.writeText(text);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+};
+var browserAnimationScheduler = {
+	requestFrame: (callback) => window.requestAnimationFrame(callback),
+	cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+	setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+	clearTimer: (handle) => window.clearTimeout(handle)
+};
 var BOARD_CENTER = Math.floor(5 / 2);
 var BLACKOUT_WAVE_POSITIONS = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
 	return Math.abs(Math.floor(left / 5) - BOARD_CENTER) + Math.abs(left % 5 - BOARD_CENTER) - (Math.abs(Math.floor(right / 5) - BOARD_CENTER) + Math.abs(right % 5 - BOARD_CENTER)) || left - right;
 });
 var BingoView = class {
 	root;
+	scheduler;
 	actions;
 	shuffleButton;
 	shareButton;
@@ -366,8 +509,9 @@ var BingoView = class {
 	freeLabelTarget = "It's Friday";
 	lastBoardWidth = 0;
 	confirmationOpen = false;
-	constructor(root) {
+	constructor(root, scheduler = browserAnimationScheduler) {
 		this.root = root;
+		this.scheduler = scheduler;
 		root.innerHTML = markup();
 		this.actions = this.required(".actions");
 		this.shuffleButton = this.required(".shuffle-button");
@@ -440,7 +584,7 @@ var BingoView = class {
 		this.announce("The tile catalog could not be loaded.");
 	}
 	renderBoard(state, deal) {
-		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
+		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		this.freeLabelTarget = this.freeTileLabel(state);
 		const fragment = document.createDocumentFragment();
@@ -505,21 +649,21 @@ var BingoView = class {
 		if (returnFocus) this.shuffleButton.focus({ preventScroll: true });
 	}
 	showShareCopied() {
-		if (this.shareFeedbackTimer) window.clearTimeout(this.shareFeedbackTimer);
+		if (this.shareFeedbackTimer) this.scheduler.clearTimer(this.shareFeedbackTimer);
 		const generation = ++this.shareFeedbackGeneration;
 		this.shareLabel.classList.remove("fading");
 		this.shareLabel.textContent = "COPIED";
-		this.shareFeedbackTimer = window.setTimeout(() => {
+		this.shareFeedbackTimer = this.scheduler.setTimer(() => {
 			this.shareFeedbackTimer = 0;
 			this.swapShareLabel("SHARE", generation);
 		}, 680);
 	}
 	announce(message) {
-		cancelAnimationFrame(this.announcementFrame);
+		this.scheduler.cancelFrame(this.announcementFrame);
 		this.announcementFrame = 0;
 		this.liveRegion.textContent = "";
 		if (!message) return;
-		this.announcementFrame = requestAnimationFrame(() => {
+		this.announcementFrame = this.scheduler.requestFrame(() => {
 			this.announcementFrame = 0;
 			this.liveRegion.textContent = message;
 		});
@@ -544,7 +688,7 @@ var BingoView = class {
 		this.shareLabel.classList.remove("fading");
 		this.shareLabel.offsetWidth;
 		this.shareLabel.classList.add("fading");
-		window.setTimeout(() => {
+		this.scheduler.setTimer(() => {
 			if (generation !== this.shareFeedbackGeneration) return;
 			this.shareLabel.textContent = text;
 			this.shareLabel.classList.remove("fading");
@@ -554,7 +698,7 @@ var BingoView = class {
 		const text = this.freeTileLabel(state);
 		if (text === this.freeLabelTarget) return;
 		this.freeLabelTarget = text;
-		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
+		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		const labels = this.board.querySelectorAll(".tile.free .tile-label");
 		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -566,7 +710,7 @@ var BingoView = class {
 			return;
 		}
 		labels.forEach((label) => label.classList.add("fading"));
-		this.freeLabelTimer = window.setTimeout(() => {
+		this.freeLabelTimer = this.scheduler.setTimer(() => {
 			this.freeLabelTimer = 0;
 			labels.forEach((label) => {
 				label.textContent = text;
@@ -612,6 +756,10 @@ var BingoView = class {
 	}
 	handleKeydown(event) {
 		if (event.key === "Tab" || event.key.startsWith("Arrow")) this.root.classList.add("keyboard-input");
+		if (event.key.startsWith("Arrow")) {
+			event.preventDefault();
+			this.moveBoardFocus(event.key);
+		}
 		if (!this.confirmationOpen) return;
 		if (event.key === "Escape") {
 			event.preventDefault();
@@ -630,11 +778,20 @@ var BingoView = class {
 		}
 	}
 	requestLabelFit() {
-		cancelAnimationFrame(this.fitFrame);
-		this.fitFrame = requestAnimationFrame(() => {
+		this.scheduler.cancelFrame(this.fitFrame);
+		this.fitFrame = this.scheduler.requestFrame(() => {
 			this.fitFrame = 0;
 			this.fitLabels();
 		});
+	}
+	moveBoardFocus(key) {
+		const active = document.activeElement instanceof HTMLElement ? document.activeElement.closest(".tile") : null;
+		if (!active || !this.board.contains(active)) return;
+		const current = Number(active.dataset.index);
+		const row = Math.floor(current / 5);
+		const column = current % 5;
+		const next = key === "ArrowLeft" ? column > 0 ? current - 1 : current : key === "ArrowRight" ? column < 4 ? current + 1 : current : key === "ArrowUp" ? row > 0 ? current - 5 : current : key === "ArrowDown" && row < 4 ? current + 5 : current;
+		this.board.querySelector(`[data-index="${next}"]`)?.focus({ preventScroll: true });
 	}
 	fitLabels() {
 		const buttons = this.board.querySelectorAll(".tile");
@@ -697,132 +854,11 @@ function markup() {
     </main>
   `;
 }
-//#endregion
-//#region src/main.ts
 var root = document.querySelector("#release-radar-bingo");
 if (root && !root.dataset.bingoReady) {
 	root.dataset.bingoReady = "true";
-	const view = new BingoView(root);
-	const storage = new BoardStorage();
-	let catalog = [];
-	let state = null;
-	let persistenceFailureAnnounced = false;
-	view.bind({
-		shuffle: () => {
-			if (!state) return;
-			if (hasManualMarks(state)) view.showShuffleConfirmation();
-			else shuffleBoard();
-		},
-		confirmShuffle: () => shuffleBoard(),
-		share: () => void shareBoard(),
-		toggleTile: (index) => markTile(index)
-	});
-	window.addEventListener("hashchange", restoreSharedBoard);
-	bootstrap();
-	async function bootstrap() {
-		const moduleUrl = new URL(import.meta.url);
-		const catalogUrl = new URL("tiles.json", moduleUrl);
-		catalogUrl.search = moduleUrl.search;
-		try {
-			catalog = await loadCatalog(catalogUrl);
-		} catch {
-			view.showFailure();
-			return;
-		}
-		const shared = readBoardHash(window.location.hash, catalog);
-		let announcement = "";
-		if (shared.kind === "valid") {
-			state = shared.state;
-			announcement = "A shared Release Radar board was loaded.";
-		} else {
-			const saved = storage.load(catalog);
-			state = saved ?? createState(generateBoard(catalog));
-			if (shared.kind === "invalid") {
-				announcement = saved ? "The shared board link was invalid. Your saved board was restored." : "The shared board link was invalid. A new board was created.";
-				clearInvalidBoardHash();
-			}
-		}
-		if (!storage.save(state)) {
-			persistenceFailureAnnounced = true;
-			announcement = [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
-		}
-		view.showReady(catalog, state);
-		if (announcement) view.announce(announcement);
-	}
-	function markTile(index) {
-		if (!state) return;
-		if (index === 12) {
-			view.announceFreeTile(state);
-			return;
-		}
-		const tile = catalog.find(({ id }) => id === state?.layout[index]);
-		if (!tile) return;
-		const result = toggleTile(state, index);
-		state = result.state;
-		view.updateState(state, result.newlyCompletedLineIds);
-		const saved = storage.save(state);
-		const marked = state.marked.has(index);
-		let announcement = result.newlyCompletedLineIds.length ? `Bingo! ${result.newlyCompletedLineIds.length === 1 ? "One line" : `${result.newlyCompletedLineIds.length} lines`} completed.` : `${tile.label} ${marked ? "marked" : "unmarked"}.`;
-		if (!saved && !persistenceFailureAnnounced) {
-			persistenceFailureAnnounced = true;
-			announcement += " Board changes cannot be saved in this browser.";
-		}
-		view.announce(announcement);
-	}
-	function shuffleBoard() {
-		if (!state) return;
-		state = createState(generateBoard(catalog));
-		view.renderBoard(state, true);
-		const saved = storage.save(state);
-		let announcement = "A new Release Radar board was shuffled.";
-		if (!saved && !persistenceFailureAnnounced) {
-			persistenceFailureAnnounced = true;
-			announcement += " Board changes cannot be saved in this browser.";
-		}
-		view.announce(announcement);
-	}
-	async function shareBoard() {
-		if (!state) return;
-		const copied = await copyText(encodeState(state, catalog));
-		if (copied) view.showShareCopied();
-		view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
-	}
-	function restoreSharedBoard() {
-		if (!state || catalog.length === 0) return;
-		const shared = readBoardHash(window.location.hash, catalog);
-		if (shared.kind === "none") return;
-		if (shared.kind === "invalid") {
-			clearInvalidBoardHash();
-			view.announce("The shared board link was invalid. Your current board was kept.");
-			return;
-		}
-		state = shared.state;
-		view.renderBoard(state, true);
-		const saved = storage.save(state);
-		let announcement = "A shared Release Radar board was loaded.";
-		if (!saved && !persistenceFailureAnnounced) {
-			persistenceFailureAnnounced = true;
-			announcement += " Board changes cannot be saved in this browser.";
-		}
-		view.announce(announcement);
-	}
+	const moduleUrl = new URL(import.meta.url);
+	const catalogUrl = new URL("tiles.json", moduleUrl);
+	catalogUrl.search = moduleUrl.search;
+	new BingoController(new CatalogSource(catalogUrl), new BoardStorage(), new BoardLocation(), new ShareClipboard(), new BingoView(root)).start();
 }
-async function copyText(text) {
-	try {
-		if (!navigator.clipboard) return false;
-		await navigator.clipboard.writeText(text);
-		return true;
-	} catch {
-		return false;
-	}
-}
-function clearInvalidBoardHash() {
-	try {
-		const url = new URL(window.location.href);
-		const params = new URLSearchParams(url.hash.slice(1));
-		params.delete("board");
-		url.hash = params.toString();
-		window.history.replaceState(null, "", url);
-	} catch {}
-}
-//#endregion

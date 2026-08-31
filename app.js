@@ -294,45 +294,37 @@ function hasExactKeys(value, expected) {
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
 var BingoController = class {
-	catalogSource;
+	catalogLoader;
 	storage;
 	location;
-	clipboard;
 	view;
+	copyToClipboard;
 	random;
 	catalog = [];
 	state = null;
 	persistenceFailureAnnounced = false;
-	constructor(catalogSource, storage, location, clipboard, view, random = Math.random) {
-		this.catalogSource = catalogSource;
+	constructor(catalogLoader, storage, location, view, copyToClipboard, random = Math.random) {
+		this.catalogLoader = catalogLoader;
 		this.storage = storage;
 		this.location = location;
-		this.clipboard = clipboard;
 		this.view = view;
+		this.copyToClipboard = copyToClipboard;
 		this.random = random;
 	}
-	start() {
-		this.view.bind({
-			shuffle: () => this.requestShuffle(),
-			confirmShuffle: () => this.shuffleBoard(),
-			share: () => void this.shareBoard(),
-			toggleTile: (index) => this.markTile(index)
+	bootstrap() {
+		this.catalogLoader.load({
+			onLoading: () => this.view.showLoading(),
+			onLoaded: (catalog) => this.handleCatalogLoaded(catalog),
+			onError: (error) => this.view.showFailure(error)
 		});
-		this.location.subscribe(() => this.restoreSharedBoard());
-		this.bootstrap();
 	}
-	async bootstrap() {
-		try {
-			this.catalog = await this.catalogSource.load();
-		} catch {
-			this.view.showFailure();
-			return;
-		}
+	handleCatalogLoaded(catalog) {
+		this.catalog = catalog;
 		const shared = this.location.read(this.catalog);
 		let announcement = "";
 		if (shared.kind === "valid") {
 			this.state = shared.state;
-			announcement = "A shared Release Radar board was loaded.";
+			announcement = "A shared Bingo board was loaded.";
 		} else {
 			const saved = this.storage.load(this.catalog);
 			this.state = saved ?? createState(generateBoard(this.catalog, this.random));
@@ -369,11 +361,11 @@ var BingoController = class {
 		if (!this.state) return;
 		this.state = createState(generateBoard(this.catalog, this.random));
 		this.view.renderBoard(this.state, true);
-		this.view.announce(this.saveWithAnnouncement("A new Release Radar board was shuffled."));
+		this.view.announce(this.saveWithAnnouncement("A new Bingo board was shuffled."));
 	}
 	async shareBoard() {
 		if (!this.state) return;
-		const copied = await this.clipboard.copy(encodeState(this.state, this.catalog));
+		const copied = await this.copyToClipboard(encodeState(this.state, this.catalog));
 		if (copied) this.view.showShareCopied();
 		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
 	}
@@ -388,12 +380,67 @@ var BingoController = class {
 		}
 		this.state = shared.state;
 		this.view.renderBoard(this.state, true);
-		this.view.announce(this.saveWithAnnouncement("A shared Release Radar board was loaded."));
+		this.view.announce(this.saveWithAnnouncement("A shared Bingo board was loaded."));
 	}
 	saveWithAnnouncement(announcement) {
 		if (!this.state || this.storage.save(this.state) || this.persistenceFailureAnnounced) return announcement;
 		this.persistenceFailureAnnounced = true;
 		return [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
+	}
+};
+var retryDelayMs = 5e3;
+var loadingGraceMs = 2e3;
+var Catalog = class {
+	source;
+	scheduler;
+	generation = 0;
+	retryTimer = 0;
+	loadingTimer = 0;
+	abortController = null;
+	constructor(source, scheduler) {
+		this.source = source;
+		this.scheduler = scheduler;
+	}
+	load(callbacks) {
+		this.cancelCurrent();
+		this.attempt(callbacks, this.generation);
+	}
+	cancelCurrent() {
+		this.generation += 1;
+		if (this.retryTimer) this.scheduler.clearTimeout(this.retryTimer);
+		this.retryTimer = 0;
+		this.clearLoadingTimer();
+		this.abortController?.abort();
+		this.abortController = null;
+	}
+	attempt(callbacks, generation) {
+		if (generation !== this.generation) return;
+		const controller = new AbortController();
+		this.abortController = controller;
+		const request = this.source.load(controller.signal);
+		this.loadingTimer = this.scheduler.setTimeout(() => {
+			this.loadingTimer = 0;
+			if (generation === this.generation && !controller.signal.aborted) callbacks.onLoading();
+		}, loadingGraceMs);
+		request.then((tiles) => {
+			if (generation !== this.generation || controller.signal.aborted) return;
+			this.clearLoadingTimer();
+			this.abortController = null;
+			callbacks.onLoaded(tiles);
+		}, (error) => {
+			if (generation !== this.generation || controller.signal.aborted || error instanceof DOMException && error.name === "AbortError") return;
+			this.clearLoadingTimer();
+			this.abortController = null;
+			callbacks.onError(error);
+			this.retryTimer = this.scheduler.setTimeout(() => {
+				this.retryTimer = 0;
+				this.attempt(callbacks, generation);
+			}, retryDelayMs);
+		});
+	}
+	clearLoadingTimer() {
+		if (this.loadingTimer) this.scheduler.clearTimeout(this.loadingTimer);
+		this.loadingTimer = 0;
 	}
 };
 var BoardLocation = class {
@@ -417,7 +464,6 @@ var BoardLocation = class {
 		this.target.addEventListener("hashchange", listener);
 	}
 };
-var STORAGE_KEY = "release-radar-bingo:board";
 function browserStorage() {
 	try {
 		return window.localStorage;
@@ -425,63 +471,118 @@ function browserStorage() {
 		return null;
 	}
 }
-var BoardStorage = class {
+var JsonStorage = class {
 	storage;
-	constructor(storage = browserStorage()) {
+	constructor(storage) {
 		this.storage = storage;
 	}
-	load(catalog) {
+	read(key) {
 		try {
-			const stored = this.storage?.getItem(STORAGE_KEY);
-			return stored ? parseSnapshot(JSON.parse(stored), catalog) : null;
+			if (!this.storage) return void 0;
+			const value = this.storage.getItem(key);
+			return value === null ? void 0 : JSON.parse(value);
 		} catch {
-			return null;
+			return;
 		}
 	}
-	save(state) {
+	write(key, value) {
 		try {
 			if (!this.storage) return false;
-			this.storage.setItem(STORAGE_KEY, JSON.stringify(stateToSnapshot(state)));
+			this.storage.setItem(key, JSON.stringify(value));
 			return true;
 		} catch {
 			return false;
 		}
+	}
+};
+var STORAGE_KEY = "bingo:board";
+var BoardStorage = class {
+	storage;
+	constructor(storage = browserStorage()) {
+		this.storage = new JsonStorage(storage);
+	}
+	load(catalog) {
+		return parseSnapshot(this.storage.read(STORAGE_KEY), catalog);
+	}
+	save(state) {
+		return this.storage.write(STORAGE_KEY, stateToSnapshot(state));
+	}
+};
+var CatalogLoadError = class extends Error {
+	kind;
+	constructor(kind, message, options) {
+		super(message, options);
+		this.kind = kind;
+		this.name = "CatalogLoadError";
 	}
 };
 var CatalogSource = class {
 	url;
-	request;
-	constructor(url, request = (...args) => fetch(...args)) {
+	fetchCatalog;
+	constructor(url, fetchCatalog = (input, init) => fetch(input, init)) {
 		this.url = url;
-		this.request = request;
+		this.fetchCatalog = fetchCatalog;
 	}
-	async load() {
-		const response = await this.request(this.url, { cache: "no-cache" });
-		if (!response.ok) throw new Error(`Tile catalog request failed: ${response.status}`);
-		return parseCatalog(await response.json());
-	}
-};
-var ShareClipboard = class {
-	target;
-	constructor(target = navigator) {
-		this.target = target;
-	}
-	async copy(text) {
+	async load(signal) {
+		const init = {
+			cache: "no-cache",
+			headers: { Accept: "application/json" }
+		};
+		if (signal) init.signal = signal;
+		let response;
 		try {
-			if (!this.target.clipboard) return false;
-			await this.target.clipboard.writeText(text);
-			return true;
-		} catch {
-			return false;
+			response = await this.fetchCatalog(this.url, init);
+		} catch (cause) {
+			if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+			throw new CatalogLoadError("network", "The Bingo catalog could not be downloaded.", { cause });
+		}
+		if (!response.ok) throw new CatalogLoadError("http", `The Bingo catalog returned ${response.status}.`);
+		let value;
+		try {
+			value = await response.json();
+		} catch (cause) {
+			throw new CatalogLoadError("invalid-json", "The Bingo catalog is not valid JSON.", { cause });
+		}
+		try {
+			return parseCatalog(value);
+		} catch (cause) {
+			throw new CatalogLoadError("invalid-catalog", cause instanceof Error ? cause.message : "The Bingo catalog is invalid.", { cause });
 		}
 	}
 };
+async function copyToClipboard(text, target = navigator) {
+	try {
+		if (!target.clipboard) return false;
+		await target.clipboard.writeText(text);
+		return true;
+	} catch {
+		return false;
+	}
+}
 var browserAnimationScheduler = {
 	requestFrame: (callback) => window.requestAnimationFrame(callback),
 	cancelFrame: (handle) => window.cancelAnimationFrame(handle),
 	setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
 	clearTimer: (handle) => window.clearTimeout(handle)
 };
+var copy = {
+	loadingCatalog: "LOADING TILES...",
+	catalogError: "COULD NOT LOAD THE CATALOG.",
+	shuffleTitle: "SHUFFLE YOUR BOARD?",
+	shuffleWarning: "YOUR CURRENT MARKS WILL BE LOST."
+};
+function isNavigationArrow(key) {
+	return key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+}
+function nextGridPosition(current, key, size) {
+	const row = Math.floor(current / size);
+	const column = current % size;
+	if (key === "ArrowLeft" && column > 0) return current - 1;
+	if (key === "ArrowRight" && column < size - 1) return current + 1;
+	if (key === "ArrowUp" && row > 0) return current - size;
+	if (key === "ArrowDown" && row < size - 1) return current + size;
+	return current;
+}
 var BOARD_CENTER = Math.floor(5 / 2);
 var BLACKOUT_WAVE_POSITIONS = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
 	return Math.abs(Math.floor(left / 5) - BOARD_CENTER) + Math.abs(left % 5 - BOARD_CENTER) - (Math.abs(Math.floor(right / 5) - BOARD_CENTER) + Math.abs(right % 5 - BOARD_CENTER)) || left - right;
@@ -574,14 +675,22 @@ var BingoView = class {
 		this.shareButton.disabled = false;
 		this.renderBoard(state, deal);
 	}
-	showFailure() {
+	showLoading() {
 		this.board.hidden = true;
 		this.boardStatus.hidden = false;
-		this.boardStatus.textContent = "COULD NOT LOAD THE TILE CATALOG";
+		this.boardStatus.textContent = copy.loadingCatalog;
+		this.boardCard.setAttribute("aria-busy", "true");
+		this.shuffleButton.disabled = true;
+		this.shareButton.disabled = true;
+	}
+	showFailure(error) {
+		this.board.hidden = true;
+		this.boardStatus.hidden = false;
+		this.boardStatus.textContent = copy.catalogError;
 		this.boardCard.setAttribute("aria-busy", "false");
 		this.shuffleButton.disabled = true;
 		this.shareButton.disabled = true;
-		this.announce("The tile catalog could not be loaded.");
+		this.announce(error instanceof Error ? error.message : "The Bingo catalog could not be loaded.");
 	}
 	renderBoard(state, deal) {
 		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
@@ -755,8 +864,8 @@ var BingoView = class {
 		this.boardCard.classList.add("is-celebrating");
 	}
 	handleKeydown(event) {
-		if (event.key === "Tab" || event.key.startsWith("Arrow")) this.root.classList.add("keyboard-input");
-		if (event.key.startsWith("Arrow")) {
+		if (event.key === "Tab" || isNavigationArrow(event.key)) this.root.classList.add("keyboard-input");
+		if (isNavigationArrow(event.key)) {
 			event.preventDefault();
 			this.moveBoardFocus(event.key);
 		}
@@ -787,10 +896,7 @@ var BingoView = class {
 	moveBoardFocus(key) {
 		const active = document.activeElement instanceof HTMLElement ? document.activeElement.closest(".tile") : null;
 		if (!active || !this.board.contains(active)) return;
-		const current = Number(active.dataset.index);
-		const row = Math.floor(current / 5);
-		const column = current % 5;
-		const next = key === "ArrowLeft" ? column > 0 ? current - 1 : current : key === "ArrowRight" ? column < 4 ? current + 1 : current : key === "ArrowUp" ? row > 0 ? current - 5 : current : key === "ArrowDown" && row < 4 ? current + 5 : current;
+		const next = nextGridPosition(Number(active.dataset.index), key, 5);
 		this.board.querySelector(`[data-index="${next}"]`)?.focus({ preventScroll: true });
 	}
 	fitLabels() {
@@ -828,21 +934,21 @@ var BingoView = class {
 };
 function markup() {
 	return `
-    <main class="bingo-shell">
+    <main class="wrap bingo-shell">
       <h1>RELEASE RADAR&#10022;</h1>
-      <div class="actions" aria-label="Board actions">
+      <div class="row header-action actions" aria-label="Bingo actions">
         <button class="button shuffle-button" type="button" disabled>SHUFFLE</button>
         <button class="button share-button" type="button" disabled><span class="share-label">SHARE</span></button>
       </div>
-      <div class="board-stage">
-        <section class="board-card glass" aria-busy="true">
-          <p class="board-status" role="status">LOADING TILES&hellip;</p>
-          <div class="board" role="group" aria-label="Release Radar bingo board" hidden></div>
+      <div class="game-surface board-stage">
+        <section class="card board-card glass" aria-busy="true">
+          <p class="board-status" role="status">${copy.loadingCatalog}</p>
+          <div class="board" role="group" aria-label="Bingo board" hidden></div>
           <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" aria-hidden="true" hidden>
-            <div class="confirmation-panel glass">
-              <strong id="bingo-shuffle-title">SHUFFLE YOUR BOARD?</strong>
-              <span id="bingo-shuffle-warning">YOUR CURRENT MARKS WILL BE LOST.</span>
-              <div class="confirmation-actions">
+            <div class="bingo-modal confirmation-panel glass">
+              <strong id="bingo-shuffle-title">${copy.shuffleTitle}</strong>
+              <span id="bingo-shuffle-warning">${copy.shuffleWarning}</span>
+              <div class="actions confirmation-actions">
                 <button class="button confirmation-cancel" type="button">CANCEL</button>
                 <button class="button confirmation-confirm" type="button">SHUFFLE</button>
               </div>
@@ -854,11 +960,24 @@ function markup() {
     </main>
   `;
 }
-var root = document.querySelector("#release-radar-bingo");
+var root = document.querySelector("#bingo");
 if (root && !root.dataset.bingoReady) {
 	root.dataset.bingoReady = "true";
 	const moduleUrl = new URL(import.meta.url);
 	const catalogUrl = new URL("tiles.json", moduleUrl);
 	catalogUrl.search = moduleUrl.search;
-	new BingoController(new CatalogSource(catalogUrl), new BoardStorage(), new BoardLocation(), new ShareClipboard(), new BingoView(root)).start();
+	const view = new BingoView(root);
+	const location = new BoardLocation();
+	const controller = new BingoController(new Catalog(new CatalogSource(catalogUrl), {
+		setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+		clearTimeout: (handle) => window.clearTimeout(handle)
+	}), new BoardStorage(), location, view, copyToClipboard);
+	view.bind({
+		shuffle: () => controller.requestShuffle(),
+		confirmShuffle: () => controller.shuffleBoard(),
+		share: () => void controller.shareBoard(),
+		toggleTile: (index) => controller.markTile(index)
+	});
+	location.subscribe(() => controller.restoreSharedBoard());
+	controller.bootstrap();
 }

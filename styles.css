@@ -16,49 +16,61 @@ body {
   --gradient-start: #49f1fa;
   --gradient-middle: #7bb0f7;
   --gradient-end: #8d64f5;
+
   --gradient: linear-gradient(
     135deg,
     var(--gradient-start),
     var(--gradient-middle) 50%,
     var(--gradient-end)
   );
-  --gradient-background-soft: linear-gradient(
+  --gradient-background: linear-gradient(
     135deg,
     rgb(from var(--gradient-start) r g b / 12%),
     rgb(from var(--gradient-middle) r g b / 12%) 50%,
     rgb(from var(--gradient-end) r g b / 12%)
   );
-  --surface-glass: rgb(from var(--off-white) r g b / 2%);
-  --surface-interactive: rgb(from var(--off-white) r g b / 20%);
-  --surface-dark: rgb(from var(--near-black) r g b / 40%);
-  --line: rgb(from var(--off-white) r g b / 20%);
+  --glass-layer: rgb(from var(--off-white) r g b / 2%);
+  --white-layer: rgb(from var(--off-white) r g b / 20%);
+  --dark-layer: rgb(from var(--near-black) r g b / 40%);
+
+  --space: 4px;
+  --radius: 8px;
   --line-width: 1px;
   --gradient-border-width: 2px;
-  --scrim: rgb(from var(--near-black) r g b / 50%);
+
+  --text-small: 12px;
+  --text-base: 15px;
+  --text-large: calc(var(--text-small) * 2);
+  --text-display: calc(var(--text-base) * 2);
+  --line-height: calc(var(--text-base) * 1.2);
+
+  --opacity-secondary: 80%;
   --glass-blur: 20px;
-  --shadow-surface: 0 6px 18px rgb(from var(--near-black) r g b / 30%);
-  --radius: 8px;
-  --space: 4px;
-  --text-display: 2rem;
-  --text-body: 0.88rem;
-  --text-label: 0.75rem;
-  --tracking-control: 0.04em;
-  --tracking-label: 0.08em;
-  --opacity-muted: 70%;
-  --duration-fast: 160ms;
+  --shadow-surface: 0 6px 18px var(--dark-layer);
+
+  --duration-fast: 200ms;
+  --duration-standard: 400ms;
+  --duration-long: 600ms;
   --duration-share-visible: 680ms;
   --duration-share-fade: 200ms;
   --duration-free-label: 180ms;
   --duration-tile-flip: 380ms;
+
   --control-height: 46px;
   --button-width: 128px;
+
+  --hover-brightness: 1.2;
   height: 100dvh;
   min-height: 0;
-  padding: calc(var(--space) * 4) calc(var(--space) * 3) 3rem;
+  padding:
+    calc(var(--space) * 4)
+    calc(var(--space) * 3)
+    calc(var(--space) * 12);
   overflow: clip;
   box-sizing: border-box;
   color: var(--off-white);
-  font-family: "Monument Extended", Inter, system-ui, sans-serif;
+  font-size: var(--text-base);
+  font-family: "Monument Extended", system-ui, sans-serif;
   scrollbar-width: none;
 }
 
@@ -148,9 +160,9 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
-  border: var(--line-width) solid var(--line);
+  border: var(--line-width) solid var(--white-layer);
   border-radius: inherit;
-  background: var(--surface-glass);
+  background: var(--glass-layer);
   backdrop-filter: blur(var(--glass-blur));
   box-shadow: var(--shadow-surface);
   pointer-events: none;
@@ -177,11 +189,10 @@ body {
   border-radius: var(--radius);
   background: transparent;
   color: var(--off-white);
-  box-shadow: inset 0 0 0 var(--line-width) var(--line);
+  box-shadow: inset 0 0 0 var(--line-width) var(--white-layer);
   cursor: pointer;
-  font-size: var(--text-body);
+  font-size: var(--text-base);
   font-weight: 800;
-  letter-spacing: var(--tracking-control);
   text-transform: uppercase;
   transition:
     filter var(--duration-fast) ease,
@@ -220,10 +231,9 @@ body {
   place-items: center;
   aspect-ratio: 1;
   margin: 0;
-  color: rgb(from var(--off-white) r g b / var(--opacity-muted));
-  font-size: var(--text-body);
+  color: rgb(from var(--off-white) r g b / var(--opacity-secondary));
+  font-size: var(--text-base);
   font-weight: 800;
-  letter-spacing: var(--tracking-control);
   text-align: center;
 }
 
@@ -260,11 +270,6 @@ body {
   opacity: 1;
 }
 
-#bingo .tile.in-completed-line::after {
-  opacity: 1;
-  animation: none;
-}
-
 #bingo .tile-inner {
   display: block;
   position: relative;
@@ -296,13 +301,13 @@ body {
 }
 
 #bingo .tile-front {
-  border: var(--line-width) solid var(--line);
-  background: var(--surface-dark);
+  border: var(--line-width) solid var(--white-layer);
+  background: var(--dark-layer);
 }
 
 #bingo .tile-back {
-  border: var(--line-width) solid var(--line);
-  background: var(--surface-interactive);
+  border: var(--line-width) solid var(--white-layer);
+  background: var(--white-layer);
   color: var(--off-white);
   transform: rotateY(180deg);
   transition:
@@ -316,14 +321,14 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--gradient-background-soft);
+  background: var(--gradient-background);
   opacity: 0;
   pointer-events: none;
   transition: opacity 420ms ease;
 }
 
 #bingo .tile.in-completed-line .tile-back {
-  background-color: var(--surface-dark);
+  background-color: var(--dark-layer);
 }
 
 #bingo .tile.in-completed-line .tile-back::before {
@@ -397,7 +402,7 @@ body {
   justify-content: center;
   padding: calc(var(--space) * 4);
   border-radius: inherit;
-  background: var(--scrim);
+  background: var(--dark-layer);
 }
 
 #bingo .shuffle-confirmation[hidden] {
@@ -416,14 +421,21 @@ body {
 }
 
 #bingo .confirmation-panel strong {
-  font-size: var(--text-body);
-  letter-spacing: var(--tracking-label);
+  width: fit-content;
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: var(--text-large);
+  font-weight: 800;
+  line-height: 1.2;
+  -webkit-text-fill-color: transparent;
 }
 
 #bingo .confirmation-panel > span {
-  font-size: var(--text-label);
-  line-height: 1.35;
-  opacity: var(--opacity-muted);
+  font-size: var(--text-small);
+  line-height: 1.5;
+  opacity: var(--opacity-secondary);
 }
 
 #bingo .sr-only {
@@ -487,7 +499,7 @@ body {
 @keyframes bingo-card-glow {
   0%,
   100% {
-    border-color: var(--line);
+    border-color: var(--white-layer);
     box-shadow: var(--shadow-surface);
   }
 
@@ -512,7 +524,7 @@ body {
   }
 
   #bingo .tile:hover .tile-face {
-    filter: brightness(1.16);
+    filter: brightness(var(--hover-brightness));
   }
 
   #bingo .tile.winning-opportunity:hover::after {
@@ -600,6 +612,12 @@ body {
     border-color: CanvasText;
     background: Canvas;
     box-shadow: none;
+  }
+
+  #bingo .confirmation-panel strong {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
   }
 
   #bingo .button::after,

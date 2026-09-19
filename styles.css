@@ -307,11 +307,10 @@ body {
 
 #bingo .tile-back {
   border: var(--line-width) solid var(--white-layer);
-  background: var(--white-layer);
+  background: var(--dark-layer);
   color: var(--off-white);
   transform: rotateY(180deg);
   transition:
-    background-color 420ms ease,
     color 420ms ease,
     filter var(--duration-fast) ease;
 }
@@ -321,14 +320,14 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--gradient-background);
-  opacity: 0;
+  background: var(--gradient);
+  opacity: 0.12;
   pointer-events: none;
   transition: opacity 420ms ease;
 }
 
 #bingo .tile.in-completed-line .tile-back {
-  background-color: var(--dark-layer);
+  color: var(--near-black);
 }
 
 #bingo .tile.in-completed-line .tile-back::before {
@@ -350,6 +349,7 @@ body {
 }
 
 #bingo .tile.in-completed-line .tile-back::after {
+  color: rgb(from var(--near-black) r g b / 70%);
   opacity: 1;
 }
 

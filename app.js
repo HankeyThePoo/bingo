@@ -290,6 +290,7 @@ var BingoController = class {
 	catalog = [];
 	state = null;
 	persistenceFailureAnnounced = false;
+	shareGeneration = 0;
 	constructor(catalogLoader, storage, location, view, copyToClipboard, random = Math.random) {
 		this.catalogLoader = catalogLoader;
 		this.storage = storage;
@@ -352,7 +353,9 @@ var BingoController = class {
 	}
 	async shareBoard() {
 		if (!this.state) return;
+		const generation = ++this.shareGeneration;
 		const copied = await this.copyToClipboard(encodeState(this.state, this.catalog));
+		if (generation !== this.shareGeneration) return;
 		if (copied) this.view.showShareCopied();
 		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
 	}

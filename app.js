@@ -27,7 +27,9 @@
 		fetch(link.href, fetchOpts);
 	}
 })();
+var freeTileIndex = Math.floor(25 / 2);
 var fridayId = "its-friday";
+var fridayLabel = "It's Friday";
 var bingoLines = [
 	...Array.from({ length: 5 }, (_, row) => ({
 		id: `row-${row}`,
@@ -39,23 +41,11 @@ var bingoLines = [
 	})),
 	{
 		id: "diagonal-down",
-		positions: [
-			0,
-			6,
-			12,
-			18,
-			24
-		]
+		positions: Array.from({ length: 5 }, (_, index) => index * 6)
 	},
 	{
 		id: "diagonal-up",
-		positions: [
-			4,
-			8,
-			12,
-			16,
-			20
-		]
+		positions: Array.from({ length: 5 }, (_, index) => (index + 1) * 4)
 	}
 ];
 function parseCatalog(value) {
@@ -73,9 +63,9 @@ function parseCatalog(value) {
 			label
 		});
 	}
-	if (tiles.filter(({ id }) => id !== "its-friday").length < 24) throw new Error("The catalog needs at least 24 ordinary tiles.");
+	if (tiles.filter(({ id }) => id !== "its-friday").length < 24) throw new Error(`The catalog needs at least 24 ordinary tiles.`);
 	const friday = tiles.find(({ id }) => id === fridayId);
-	if (!friday || friday.label !== "It's Friday") throw new Error("The catalog needs one It's Friday free tile.");
+	if (!friday || friday.label !== "It's Friday") throw new Error(`The catalog needs one ${fridayLabel} free tile.`);
 	return tiles;
 }
 function generateBoard(catalog, random = Math.random) {
@@ -88,43 +78,41 @@ function generateBoard(catalog, random = Math.random) {
 		[ordinary[index], ordinary[swapIndex]] = [ordinary[swapIndex], ordinary[index]];
 	}
 	const layout = ordinary.slice(0, 24);
-	layout.splice(12, 0, fridayId);
+	layout.splice(freeTileIndex, 0, fridayId);
 	return layout;
 }
 function createState(layout) {
-	const marked = /* @__PURE__ */ new Set([12]);
+	const marked = /* @__PURE__ */ new Set([freeTileIndex]);
 	return {
 		layout: [...layout],
-		marked,
-		completedLines: completedLineIds(marked)
+		marked
 	};
 }
 function restoreState(layout, marked) {
 	const restoredMarked = new Set(marked);
-	restoredMarked.add(12);
+	restoredMarked.add(freeTileIndex);
 	return {
 		layout: [...layout],
-		marked: restoredMarked,
-		completedLines: completedLineIds(restoredMarked)
+		marked: restoredMarked
 	};
 }
 function toggleTile(state, index) {
-	if (!Number.isInteger(index) || index < 0 || index >= 25 || index === 12) return {
+	if (!Number.isInteger(index) || index < 0 || index >= 25 || index === freeTileIndex) return {
 		state,
 		newlyCompletedLineIds: []
 	};
 	const marked = new Set(state.marked);
 	if (marked.has(index)) marked.delete(index);
 	else marked.add(index);
-	marked.add(12);
+	marked.add(freeTileIndex);
+	const previousLines = completedLineIds(state.marked);
 	const completedLines = completedLineIds(marked);
 	return {
 		state: {
 			layout: state.layout,
-			marked,
-			completedLines
+			marked
 		},
-		newlyCompletedLineIds: [...completedLines].filter((lineId) => !state.completedLines.has(lineId))
+		newlyCompletedLineIds: [...completedLines].filter((lineId) => !previousLines.has(lineId))
 	};
 }
 function completedLineIds(marked) {
@@ -148,7 +136,7 @@ function positionsForLines(lineIds) {
 	return positions;
 }
 function hasManualMarks(state) {
-	return [...state.marked].some((index) => index !== 12);
+	return [...state.marked].some((index) => index !== freeTileIndex);
 }
 function isRecord$1(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
@@ -159,8 +147,7 @@ function hasExactKeys$1(value, expected) {
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
 var maxMarkedMask = 2 ** 25 - 1;
-var compactLayoutCells = 24;
-var compactMarkBits = BigInt(compactLayoutCells);
+var compactMarkBits = BigInt(24);
 var compactMarkMask = (1n << compactMarkBits) - 1n;
 var catalogFingerprintModulus = 4096;
 function stateToSnapshot(state) {
@@ -182,9 +169,9 @@ function parseSnapshot(value, catalog) {
 		seen.add(id);
 		layout.push(id);
 	}
-	if (layout[12] !== "its-friday" || layout.filter((id) => id === "its-friday").length !== 1) return null;
+	if (layout[freeTileIndex] !== "its-friday" || layout.filter((id) => id === "its-friday").length !== 1) return null;
 	const mask = Number(value.marked);
-	if (Math.floor(mask / 2 ** 12) % 2 !== 1) return null;
+	if (Math.floor(mask / 2 ** freeTileIndex) % 2 !== 1) return null;
 	const marked = /* @__PURE__ */ new Set();
 	for (let index = 0; index < 25; index += 1) if (Math.floor(mask / 2 ** index) % 2 === 1) marked.add(index);
 	return restoreState(layout, marked);
@@ -194,7 +181,7 @@ function encodeState(state, catalog) {
 	const available = [...ordinaryIds];
 	let layoutRank = 0n;
 	for (let index = 0; index < 25; index += 1) {
-		if (index === 12) continue;
+		if (index === freeTileIndex) continue;
 		const id = state.layout[index];
 		const digit = id ? available.indexOf(id) : -1;
 		if (digit < 0) throw new Error("The board cannot be encoded with this catalog.");
@@ -204,25 +191,25 @@ function encodeState(state, catalog) {
 	let marked = 0n;
 	let markedBit = 0n;
 	for (let index = 0; index < 25; index += 1) {
-		if (index === 12) continue;
+		if (index === freeTileIndex) continue;
 		if (state.marked.has(index)) marked |= 1n << markedBit;
 		markedBit += 1n;
 	}
-	const permutations = permutationCount(ordinaryIds.length, compactLayoutCells);
+	const permutations = permutationCount(ordinaryIds.length, 24);
 	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << compactMarkBits | marked);
 }
 function decodeState(payload, catalog) {
 	try {
 		const ordinaryIds = compactCatalogIds(catalog);
-		const permutations = permutationCount(ordinaryIds.length, compactLayoutCells);
+		const permutations = permutationCount(ordinaryIds.length, 24);
 		const packed = decodeBigInt(payload);
 		if (packed === null) return null;
 		const markedMask = packed & compactMarkMask;
 		const catalogAndLayout = packed >> compactMarkBits;
 		if (Number(catalogAndLayout / permutations) !== catalogFingerprint(ordinaryIds)) return null;
 		let layoutRank = catalogAndLayout % permutations;
-		const digits = new Array(compactLayoutCells);
-		for (let index = compactLayoutCells - 1; index >= 0; index -= 1) {
+		const digits = new Array(24);
+		for (let index = 23; index >= 0; index -= 1) {
 			const radix = BigInt(ordinaryIds.length - index);
 			digits[index] = Number(layoutRank % radix);
 			layoutRank /= radix;
@@ -230,13 +217,13 @@ function decodeState(payload, catalog) {
 		if (layoutRank !== 0n) return null;
 		const available = [...ordinaryIds];
 		const layout = digits.map((digit) => available.splice(digit, 1)[0]);
-		layout.splice(12, 0, fridayId);
+		layout.splice(freeTileIndex, 0, fridayId);
 		const marked = /* @__PURE__ */ new Set();
 		let markedBit = 0n;
 		for (let index = 0; index < 25; index += 1) {
-			if (index === 12) marked.add(index);
+			if (index === freeTileIndex) marked.add(index);
 			else if ((markedMask & 1n << markedBit) !== 0n) marked.add(index);
-			if (index !== 12) markedBit += 1n;
+			if (index !== freeTileIndex) markedBit += 1n;
 		}
 		return restoreState(layout, marked);
 	} catch {
@@ -254,7 +241,7 @@ function readBoardHash(hash, catalog) {
 }
 function compactCatalogIds(catalog) {
 	const ids = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
-	if (ids.length < compactLayoutCells || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
+	if (ids.length < 24 || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
 	return ids;
 }
 function permutationCount(size, count) {
@@ -325,15 +312,15 @@ var BingoController = class {
 		let announcement = "";
 		if (shared.kind === "valid") {
 			this.state = shared.state;
-			announcement = "A shared Bingo board was loaded.";
+			announcement = this.saveWithAnnouncement("A shared Bingo board was loaded.");
 		} else {
 			this.state = saved ?? createState(generateBoard(this.catalog, this.random));
 			if (shared.kind === "invalid") {
 				announcement = saved ? "The shared board link was invalid. Your saved board was restored." : "The shared board link was invalid. A new board was created.";
 				this.location.clearBoardHash();
 			}
+			if (!saved) announcement = this.saveWithAnnouncement(announcement);
 		}
-		announcement = this.saveWithAnnouncement(announcement);
 		this.view.showReady(this.catalog, this.state);
 		if (announcement) this.view.announce(announcement);
 	}
@@ -344,7 +331,7 @@ var BingoController = class {
 	}
 	markTile(index) {
 		if (!this.state) return;
-		if (index === 12) {
+		if (index === freeTileIndex) {
 			this.view.announceFreeTile(this.state);
 			return;
 		}
@@ -393,55 +380,24 @@ var loadingGraceMs = 2e3;
 var Catalog = class {
 	source;
 	scheduler;
-	generation = 0;
-	retryTimer = 0;
-	loadingTimer = 0;
-	abortController = null;
 	constructor(source, scheduler) {
 		this.source = source;
 		this.scheduler = scheduler;
 	}
 	load(callbacks) {
-		this.cancelCurrent();
-		this.attempt(callbacks, this.generation);
+		this.attempt(callbacks);
 	}
-	cancelCurrent() {
-		this.generation += 1;
-		if (this.retryTimer) this.scheduler.clearTimeout(this.retryTimer);
-		this.retryTimer = 0;
-		this.clearLoadingTimer();
-		this.abortController?.abort();
-		this.abortController = null;
-	}
-	attempt(callbacks, generation) {
-		if (generation !== this.generation) return;
-		const controller = new AbortController();
-		this.abortController = controller;
-		const request = this.source.load(controller.signal);
-		this.loadingTimer = this.scheduler.setTimeout(() => {
-			this.loadingTimer = 0;
-			if (generation === this.generation && !controller.signal.aborted) callbacks.onLoading();
-		}, loadingGraceMs);
-		request.then((tiles) => {
-			if (generation !== this.generation || controller.signal.aborted) return;
-			this.clearLoadingTimer();
-			this.abortController = null;
+	attempt(callbacks) {
+		const loadingTimer = this.scheduler.setTimeout(callbacks.onLoading, loadingGraceMs);
+		this.source.load().then((tiles) => {
+			this.scheduler.clearTimeout(loadingTimer);
 			callbacks.onLoaded(tiles);
 		}, (error) => {
-			if (generation !== this.generation || controller.signal.aborted || error instanceof DOMException && error.name === "AbortError") return;
-			this.clearLoadingTimer();
-			this.abortController = null;
+			this.scheduler.clearTimeout(loadingTimer);
 			callbacks.onError(error);
 			if (error && typeof error === "object" && "retryable" in error && error.retryable === false) return;
-			this.retryTimer = this.scheduler.setTimeout(() => {
-				this.retryTimer = 0;
-				this.attempt(callbacks, generation);
-			}, retryDelayMs);
+			this.scheduler.setTimeout(() => this.attempt(callbacks), retryDelayMs);
 		});
-	}
-	clearLoadingTimer() {
-		if (this.loadingTimer) this.scheduler.clearTimeout(this.loadingTimer);
-		this.loadingTimer = 0;
 	}
 };
 var BoardLocation = class {
@@ -522,23 +478,19 @@ var CatalogLoadError = class extends Error {
 var CatalogSource = class {
 	url;
 	fetchCatalog;
-	tiles = null;
 	constructor(url, fetchCatalog = (input, init) => fetch(input, init)) {
 		this.url = url;
 		this.fetchCatalog = fetchCatalog;
 	}
-	async load(signal) {
-		if (this.tiles) return this.tiles;
+	async load() {
 		const init = {
 			cache: "no-cache",
 			headers: { Accept: "application/json" }
 		};
-		if (signal) init.signal = signal;
 		let response;
 		try {
-			response = await this.fetchCatalog(new URL(this.url), init);
+			response = await this.fetchCatalog(this.url, init);
 		} catch (cause) {
-			if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
 			throw new CatalogLoadError("network", "The Bingo catalog could not be downloaded.", { cause });
 		}
 		if (!response.ok) throw new CatalogLoadError("http", `The Bingo catalog returned ${response.status}.`, void 0, response.status);
@@ -548,7 +500,6 @@ var CatalogSource = class {
 		} catch (cause) {
 			throw new CatalogLoadError("network", "The Bingo catalog download was interrupted.", { cause });
 		}
-		signal?.throwIfAborted();
 		let value;
 		try {
 			value = JSON.parse(text);
@@ -556,8 +507,7 @@ var CatalogSource = class {
 			throw new CatalogLoadError("invalid-json", "The Bingo catalog is not valid JSON.", { cause });
 		}
 		try {
-			this.tiles = Object.freeze(parseCatalog(value).map((tile) => Object.freeze({ ...tile })));
-			return this.tiles;
+			return parseCatalog(value);
 		} catch (cause) {
 			throw new CatalogLoadError("invalid-catalog", cause instanceof Error ? cause.message : "The Bingo catalog is invalid.", { cause });
 		}
@@ -620,7 +570,7 @@ var BingoView = class {
 	shareFeedbackTimer = 0;
 	shareFeedbackGeneration = 0;
 	freeLabelTimer = 0;
-	freeLabelTarget = "It's Friday";
+	freeLabelTarget = fridayLabel;
 	lastBoardWidth = 0;
 	confirmationOpen = false;
 	constructor(root, scheduler = browserAnimationScheduler) {
@@ -706,6 +656,8 @@ var BingoView = class {
 		this.announce(error instanceof Error ? error.message : "The Bingo catalog could not be loaded.");
 	}
 	renderBoard(state, deal) {
+		this.hideShuffleConfirmation(true);
+		this.boardCard.classList.remove("is-celebrating");
 		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		this.freeLabelTarget = this.freeTileLabel(state);
@@ -713,14 +665,14 @@ var BingoView = class {
 		state.layout.forEach((id, index) => {
 			const tile = this.tilesById.get(id);
 			if (!tile) return;
-			const label = index === 12 ? this.freeLabelTarget : tile.label;
+			const label = index === freeTileIndex ? this.freeLabelTarget : tile.label;
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = "tile";
 			button.dataset.index = String(index);
 			button.style.setProperty("--deal-order", String(index));
 			if (deal) button.classList.add("is-dealing");
-			if (index === 12) {
+			if (index === freeTileIndex) {
 				button.classList.add("free");
 				button.setAttribute("aria-disabled", "true");
 			}
@@ -736,7 +688,7 @@ var BingoView = class {
 		this.requestLabelFit();
 	}
 	updateState(state, newlyCompletedLineIds) {
-		const completedPositions = positionsForLines(state.completedLines);
+		const completedPositions = positionsForLines(completedLineIds(state.marked));
 		const winningPositions = winningOpportunityPositions(state.marked);
 		this.board.querySelectorAll(".tile").forEach((button, index) => {
 			const tile = this.tilesById.get(state.layout[index] ?? "");
@@ -747,7 +699,7 @@ var BingoView = class {
 			button.classList.toggle("in-completed-line", completedPositions.has(index));
 			button.classList.toggle("winning-opportunity", winningOpportunity);
 			button.setAttribute("aria-pressed", String(marked));
-			button.setAttribute("aria-label", index === 12 ? this.freeTileAriaLabel(state) : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
+			button.setAttribute("aria-label", index === freeTileIndex ? this.freeTileAriaLabel(state) : `${tile.label}, ${marked ? "marked" : "not marked"}${winningOpportunity ? ", completes bingo" : ""}`);
 		});
 		this.updateFreeTileLabel(state);
 		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds, state);
@@ -843,17 +795,17 @@ var BingoView = class {
 	}
 	freeTileLabel(state) {
 		if (state.marked.size === 25) return "BLACKOUT";
-		return state.completedLines.size > 0 ? "BINGO" : "It's Friday";
+		return completedLineIds(state.marked).size > 0 ? "BINGO" : fridayLabel;
 	}
 	freeTileAriaLabel(state) {
 		if (state.marked.size === 25) return "Blackout, full board, free space";
-		const lines = state.completedLines.size;
-		return lines > 0 ? `Bingo, ${lines} completed ${lines === 1 ? "line" : "lines"}, free space` : "It's Friday, free space";
+		const lines = completedLineIds(state.marked).size;
+		return lines > 0 ? `Bingo, ${lines} completed ${lines === 1 ? "line" : "lines"}, free space` : `${fridayLabel}, free space`;
 	}
 	celebrate(lineIds, state) {
 		const blackout = state.marked.size === 25;
 		const winningPositions = blackout ? blackoutWavePositions : [...positionsForLines(lineIds)].sort((left, right) => left - right);
-		const progress = Math.max(0, state.completedLines.size - 1) / (bingoLines.length - 1);
+		const progress = Math.max(0, completedLineIds(state.marked).size - 1) / (bingoLines.length - 1);
 		const intensity = Math.sqrt(progress);
 		const scaled = (start, end) => Math.round(start + (end - start) * intensity);
 		this.boardCard.style.setProperty("--celebration-lift", `${-scaled(26, 60)}px`);

@@ -27,8 +27,8 @@
 		fetch(link.href, fetchOpts);
 	}
 })();
-var FRIDAY_ID = "its-friday";
-var BINGO_LINES = [
+var fridayId = "its-friday";
+var bingoLines = [
 	...Array.from({ length: 5 }, (_, row) => ({
 		id: `row-${row}`,
 		positions: Array.from({ length: 5 }, (_, column) => row * 5 + column)
@@ -74,12 +74,12 @@ function parseCatalog(value) {
 		});
 	}
 	if (tiles.filter(({ id }) => id !== "its-friday").length < 24) throw new Error("The catalog needs at least 24 ordinary tiles.");
-	const friday = tiles.find(({ id }) => id === FRIDAY_ID);
+	const friday = tiles.find(({ id }) => id === fridayId);
 	if (!friday || friday.label !== "It's Friday") throw new Error("The catalog needs one It's Friday free tile.");
 	return tiles;
 }
 function generateBoard(catalog, random = Math.random) {
-	const ordinary = catalog.filter(({ id }) => id !== FRIDAY_ID).map(({ id }) => id);
+	const ordinary = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id);
 	if (ordinary.length < 24) throw new Error("There are not enough ordinary tiles to create a board.");
 	for (let index = ordinary.length - 1; index > 0; index -= 1) {
 		const sample = random();
@@ -88,7 +88,7 @@ function generateBoard(catalog, random = Math.random) {
 		[ordinary[index], ordinary[swapIndex]] = [ordinary[swapIndex], ordinary[index]];
 	}
 	const layout = ordinary.slice(0, 24);
-	layout.splice(12, 0, FRIDAY_ID);
+	layout.splice(12, 0, fridayId);
 	return layout;
 }
 function createState(layout) {
@@ -128,11 +128,11 @@ function toggleTile(state, index) {
 	};
 }
 function completedLineIds(marked) {
-	return new Set(BINGO_LINES.filter(({ positions }) => positions.every((position) => marked.has(position))).map(({ id }) => id));
+	return new Set(bingoLines.filter(({ positions }) => positions.every((position) => marked.has(position))).map(({ id }) => id));
 }
 function winningOpportunityPositions(marked) {
 	const positions = /* @__PURE__ */ new Set();
-	for (const line of BINGO_LINES) {
+	for (const line of bingoLines) {
 		const missing = line.positions.filter((position) => !marked.has(position));
 		if (missing.length === 1) positions.add(missing[0]);
 	}
@@ -141,7 +141,7 @@ function winningOpportunityPositions(marked) {
 function positionsForLines(lineIds) {
 	const requested = new Set(lineIds);
 	const positions = /* @__PURE__ */ new Set();
-	for (const line of BINGO_LINES) {
+	for (const line of bingoLines) {
 		if (!requested.has(line.id)) continue;
 		for (const position of line.positions) positions.add(position);
 	}
@@ -158,11 +158,11 @@ function hasExactKeys$1(value, expected) {
 	const sortedExpected = [...expected].sort();
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
-var MAX_MARKED_MASK = 2 ** 25 - 1;
-var COMPACT_LAYOUT_CELLS = 24;
-var COMPACT_MARK_BITS = BigInt(COMPACT_LAYOUT_CELLS);
-var COMPACT_MARK_MASK = (1n << COMPACT_MARK_BITS) - 1n;
-var CATALOG_FINGERPRINT_MODULUS = 4096;
+var maxMarkedMask = 2 ** 25 - 1;
+var compactLayoutCells = 24;
+var compactMarkBits = BigInt(compactLayoutCells);
+var compactMarkMask = (1n << compactMarkBits) - 1n;
+var catalogFingerprintModulus = 4096;
 function stateToSnapshot(state) {
 	let marked = 0;
 	for (const position of state.marked) marked += 2 ** position;
@@ -173,7 +173,7 @@ function stateToSnapshot(state) {
 }
 function parseSnapshot(value, catalog) {
 	if (!isRecord(value) || !hasExactKeys(value, ["layout", "marked"])) return null;
-	if (!Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > MAX_MARKED_MASK) return null;
+	if (!Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > maxMarkedMask) return null;
 	const catalogIds = new Set(catalog.map(({ id }) => id));
 	const layout = [];
 	const seen = /* @__PURE__ */ new Set();
@@ -208,21 +208,21 @@ function encodeState(state, catalog) {
 		if (state.marked.has(index)) marked |= 1n << markedBit;
 		markedBit += 1n;
 	}
-	const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
-	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << COMPACT_MARK_BITS | marked);
+	const permutations = permutationCount(ordinaryIds.length, compactLayoutCells);
+	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << compactMarkBits | marked);
 }
 function decodeState(payload, catalog) {
 	try {
 		const ordinaryIds = compactCatalogIds(catalog);
-		const permutations = permutationCount(ordinaryIds.length, COMPACT_LAYOUT_CELLS);
+		const permutations = permutationCount(ordinaryIds.length, compactLayoutCells);
 		const packed = decodeBigInt(payload);
 		if (packed === null) return null;
-		const markedMask = packed & COMPACT_MARK_MASK;
-		const catalogAndLayout = packed >> COMPACT_MARK_BITS;
+		const markedMask = packed & compactMarkMask;
+		const catalogAndLayout = packed >> compactMarkBits;
 		if (Number(catalogAndLayout / permutations) !== catalogFingerprint(ordinaryIds)) return null;
 		let layoutRank = catalogAndLayout % permutations;
-		const digits = new Array(COMPACT_LAYOUT_CELLS);
-		for (let index = COMPACT_LAYOUT_CELLS - 1; index >= 0; index -= 1) {
+		const digits = new Array(compactLayoutCells);
+		for (let index = compactLayoutCells - 1; index >= 0; index -= 1) {
 			const radix = BigInt(ordinaryIds.length - index);
 			digits[index] = Number(layoutRank % radix);
 			layoutRank /= radix;
@@ -230,7 +230,7 @@ function decodeState(payload, catalog) {
 		if (layoutRank !== 0n) return null;
 		const available = [...ordinaryIds];
 		const layout = digits.map((digit) => available.splice(digit, 1)[0]);
-		layout.splice(12, 0, FRIDAY_ID);
+		layout.splice(12, 0, fridayId);
 		const marked = /* @__PURE__ */ new Set();
 		let markedBit = 0n;
 		for (let index = 0; index < 25; index += 1) {
@@ -253,8 +253,8 @@ function readBoardHash(hash, catalog) {
 	} : { kind: "invalid" };
 }
 function compactCatalogIds(catalog) {
-	const ids = catalog.filter(({ id }) => id !== FRIDAY_ID).map(({ id }) => id).sort();
-	if (ids.length < COMPACT_LAYOUT_CELLS || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
+	const ids = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
+	if (ids.length < compactLayoutCells || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
 	return ids;
 }
 function permutationCount(size, count) {
@@ -265,7 +265,7 @@ function permutationCount(size, count) {
 function catalogFingerprint(ids) {
 	let hash = 2166136261;
 	for (const character of ids.join("\0")) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-	return (hash >>> 0) % CATALOG_FINGERPRINT_MODULUS;
+	return (hash >>> 0) % catalogFingerprintModulus;
 }
 function encodeBigInt(value) {
 	const bytes = [];
@@ -465,7 +465,7 @@ var BoardLocation = class {
 		this.target.addEventListener("hashchange", listener);
 	}
 };
-var STORAGE_KEY = "bingo:board";
+var storageKey = "bingo:board";
 var BoardStorage = class {
 	storage;
 	readFailed = false;
@@ -476,7 +476,7 @@ var BoardStorage = class {
 		let raw;
 		try {
 			if (!this.storage) throw new Error("Storage unavailable.");
-			raw = this.storage.getItem(STORAGE_KEY);
+			raw = this.storage.getItem(storageKey);
 		} catch {
 			this.readFailed = true;
 			return null;
@@ -492,7 +492,7 @@ var BoardStorage = class {
 	save(state) {
 		if (this.readFailed || !this.storage) return false;
 		try {
-			this.storage.setItem(STORAGE_KEY, JSON.stringify(stateToSnapshot(state)));
+			this.storage.setItem(storageKey, JSON.stringify(stateToSnapshot(state)));
 			return true;
 		} catch {
 			return false;
@@ -596,9 +596,9 @@ function nextGridPosition(current, key, size) {
 	if (key === "ArrowDown" && row < size - 1) return current + size;
 	return current;
 }
-var BOARD_CENTER = Math.floor(5 / 2);
-var BLACKOUT_WAVE_POSITIONS = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
-	return Math.abs(Math.floor(left / 5) - BOARD_CENTER) + Math.abs(left % 5 - BOARD_CENTER) - (Math.abs(Math.floor(right / 5) - BOARD_CENTER) + Math.abs(right % 5 - BOARD_CENTER)) || left - right;
+var boardCenter = Math.floor(5 / 2);
+var blackoutWavePositions = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
+	return Math.abs(Math.floor(left / 5) - boardCenter) + Math.abs(left % 5 - boardCenter) - (Math.abs(Math.floor(right / 5) - boardCenter) + Math.abs(right % 5 - boardCenter)) || left - right;
 });
 var BingoView = class {
 	root;
@@ -852,8 +852,8 @@ var BingoView = class {
 	}
 	celebrate(lineIds, state) {
 		const blackout = state.marked.size === 25;
-		const winningPositions = blackout ? BLACKOUT_WAVE_POSITIONS : [...positionsForLines(lineIds)].sort((left, right) => left - right);
-		const progress = Math.max(0, state.completedLines.size - 1) / (BINGO_LINES.length - 1);
+		const winningPositions = blackout ? blackoutWavePositions : [...positionsForLines(lineIds)].sort((left, right) => left - right);
+		const progress = Math.max(0, state.completedLines.size - 1) / (bingoLines.length - 1);
 		const intensity = Math.sqrt(progress);
 		const scaled = (start, end) => Math.round(start + (end - start) * intensity);
 		this.boardCard.style.setProperty("--celebration-lift", `${-scaled(26, 60)}px`);

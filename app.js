@@ -68,7 +68,7 @@ function parseCatalog(value) {
 	if (!friday || friday.label !== "It's Friday") throw new Error(`The catalog needs one ${fridayLabel} free tile.`);
 	return tiles;
 }
-function generateBoard(catalog, random = Math.random) {
+function generateBoard(catalog, random) {
 	const ordinary = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id);
 	if (ordinary.length < 24) throw new Error("There are not enough ordinary tiles to create a board.");
 	for (let index = ordinary.length - 1; index > 0; index -= 1) {
@@ -97,14 +97,10 @@ function restoreState(layout, marked) {
 	};
 }
 function toggleTile(state, index) {
-	if (!Number.isInteger(index) || index < 0 || index >= 25 || index === freeTileIndex) return {
-		state,
-		newlyCompletedLineIds: []
-	};
+	if (!Number.isInteger(index) || index < 0 || index >= 25 || index === freeTileIndex) throw new Error(`Invalid Bingo tile position: ${index}.`);
 	const marked = new Set(state.marked);
 	if (marked.has(index)) marked.delete(index);
 	else marked.add(index);
-	marked.add(freeTileIndex);
 	const previousLines = completedLineIds(state.marked);
 	const completedLines = completedLineIds(marked);
 	return {
@@ -151,7 +147,6 @@ function encodeState(state, catalog) {
 	const seen = /* @__PURE__ */ new Set();
 	let layoutIndexes = "";
 	let markedMask = 0;
-	let markedBit = 0;
 	for (let index = 0; index < 25; index += 1) {
 		if (index === freeTileIndex) continue;
 		const id = state.layout[index];
@@ -159,8 +154,7 @@ function encodeState(state, catalog) {
 		if (!id || catalogIndex < 0 || seen.has(id)) throw new Error("The board cannot be encoded with this catalog.");
 		seen.add(id);
 		layoutIndexes += alphabet.charAt(catalogIndex);
-		if (state.marked.has(index)) markedMask |= 1 << markedBit;
-		markedBit += 1;
+		if (state.marked.has(index)) markedMask |= 1 << (index < freeTileIndex ? index : index - 1);
 	}
 	const fingerprint = catalogFingerprint(ordinaryIds);
 	return alphabet.charAt(fingerprint >> 6) + alphabet.charAt(fingerprint & 63) + layoutIndexes + [
@@ -188,22 +182,11 @@ function decodeState(payload, catalog) {
 	let markedMask = 0;
 	for (const digit of digits.slice(-4)) markedMask = markedMask * 64 + digit;
 	const marked = /* @__PURE__ */ new Set();
-	let markedBit = 0;
 	for (let index = 0; index < 25; index += 1) {
-		if (index === freeTileIndex) marked.add(index);
-		else if ((markedMask & 1 << markedBit) !== 0) marked.add(index);
-		if (index !== freeTileIndex) markedBit += 1;
+		if (index === freeTileIndex) continue;
+		if ((markedMask & 1 << (index < freeTileIndex ? index : index - 1)) !== 0) marked.add(index);
 	}
 	return restoreState(layout, marked);
-}
-function readBoardHash(hash, catalog) {
-	const payload = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash).get("board");
-	if (payload === null) return { kind: "none" };
-	const state = decodeState(payload, catalog);
-	return state ? {
-		kind: "valid",
-		state
-	} : { kind: "invalid" };
 }
 function compactCatalogIds(catalog) {
 	return catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
@@ -293,7 +276,7 @@ var BingoController = class {
 		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
 	}
 	restoreSharedBoard() {
-		if (!this.state || this.catalog.length === 0) return;
+		if (!this.state) return;
 		const shared = this.location.read(this.catalog);
 		if (shared.kind === "none") return;
 		if (shared.kind === "invalid") {
@@ -306,7 +289,12 @@ var BingoController = class {
 		this.view.announce(this.saveWithAnnouncement("A shared Bingo board was loaded."));
 	}
 	saveWithAnnouncement(announcement) {
-		if (!this.state || this.storage.save(this.state) || this.persistenceFailureAnnounced) return announcement;
+		if (!this.state) return announcement;
+		if (this.storage.save(this.state)) {
+			this.location.clearBoardHash();
+			return announcement;
+		}
+		if (this.persistenceFailureAnnounced) return announcement;
 		this.persistenceFailureAnnounced = true;
 		const failure = "Board changes cannot be saved in this browser.";
 		return announcement ? `${announcement} ${failure}` : failure;
@@ -322,9 +310,6 @@ var Catalog = class {
 		this.scheduler = scheduler;
 	}
 	load(callbacks) {
-		this.attempt(callbacks);
-	}
-	attempt(callbacks) {
 		const loadingTimer = this.scheduler.setTimeout(callbacks.onLoading, loadingGraceMs);
 		this.source.load().then((tiles) => {
 			this.scheduler.clearTimeout(loadingTimer);
@@ -333,7 +318,7 @@ var Catalog = class {
 			this.scheduler.clearTimeout(loadingTimer);
 			callbacks.onError(error);
 			if (error && typeof error === "object" && "retryable" in error && error.retryable === false) return;
-			this.scheduler.setTimeout(() => this.attempt(callbacks), retryDelayMs);
+			this.scheduler.setTimeout(() => this.load(callbacks), retryDelayMs);
 		});
 	}
 };
@@ -343,12 +328,19 @@ var BoardLocation = class {
 		this.target = target;
 	}
 	read(catalog) {
-		return readBoardHash(this.target.location.hash, catalog);
+		const payload = new URLSearchParams(this.target.location.hash.slice(1)).get("board");
+		if (payload === null) return { kind: "none" };
+		const state = decodeState(payload, catalog);
+		return state ? {
+			kind: "valid",
+			state
+		} : { kind: "invalid" };
 	}
 	clearBoardHash() {
 		try {
 			const url = new URL(this.target.location.href);
 			const params = new URLSearchParams(url.hash.slice(1));
+			if (!params.has("board")) return;
 			params.delete("board");
 			url.hash = params.toString();
 			this.target.history.replaceState(null, "", url);
@@ -359,7 +351,7 @@ var BoardLocation = class {
 	}
 };
 var storageKey = "bingo:board";
-var maxMarkedMask = 2 ** 25 - 1;
+var maxMarkedMask = (1 << 25) - 1;
 var BoardStorage = class {
 	storage;
 	readFailed = false;
@@ -367,9 +359,12 @@ var BoardStorage = class {
 		this.storage = storage;
 	}
 	load(catalog) {
+		if (!this.storage) {
+			this.readFailed = true;
+			return null;
+		}
 		let raw;
 		try {
-			if (!this.storage) throw new Error("Storage unavailable.");
 			raw = this.storage.getItem(storageKey);
 		} catch {
 			this.readFailed = true;
@@ -385,8 +380,9 @@ var BoardStorage = class {
 	}
 	save(state) {
 		if (this.readFailed || !this.storage) return false;
+		const snapshot = JSON.stringify(stateToSnapshot(state));
 		try {
-			this.storage.setItem(storageKey, JSON.stringify(stateToSnapshot(state)));
+			this.storage.setItem(storageKey, snapshot);
 			return true;
 		} catch {
 			return false;
@@ -395,7 +391,7 @@ var BoardStorage = class {
 };
 function stateToSnapshot(state) {
 	let marked = 0;
-	for (const position of state.marked) marked += 2 ** position;
+	for (const position of state.marked) marked |= 1 << position;
 	return {
 		layout: [...state.layout],
 		marked
@@ -403,7 +399,7 @@ function stateToSnapshot(state) {
 }
 function parseSnapshot(value, catalog) {
 	if (!isRecord(value) || !hasExactKeys(value, ["layout", "marked"])) return null;
-	if (!Array.isArray(value.layout) || value.layout.length !== 25 || !Number.isSafeInteger(value.marked) || Number(value.marked) < 0 || Number(value.marked) > maxMarkedMask) return null;
+	if (!Array.isArray(value.layout) || value.layout.length !== 25 || typeof value.marked !== "number" || !Number.isSafeInteger(value.marked) || value.marked < 0 || value.marked > maxMarkedMask) return null;
 	const catalogIds = new Set(catalog.map(({ id }) => id));
 	const layout = [];
 	const seen = /* @__PURE__ */ new Set();
@@ -413,10 +409,10 @@ function parseSnapshot(value, catalog) {
 		layout.push(id);
 	}
 	if (layout[freeTileIndex] !== "its-friday") return null;
-	const mask = Number(value.marked);
-	if (Math.floor(mask / 2 ** freeTileIndex) % 2 !== 1) return null;
+	const mask = value.marked;
+	if ((mask & 1 << freeTileIndex) === 0) return null;
 	const marked = /* @__PURE__ */ new Set();
-	for (let index = 0; index < 25; index += 1) if (Math.floor(mask / 2 ** index) % 2 === 1) marked.add(index);
+	for (let index = 0; index < 25; index += 1) if ((mask & 1 << index) !== 0) marked.add(index);
 	return restoreState(layout, marked);
 }
 function browserStorage() {
@@ -445,7 +441,7 @@ var CatalogLoadError = class extends Error {
 var CatalogSource = class {
 	url;
 	fetchCatalog;
-	constructor(url, fetchCatalog = (input, init) => fetch(input, init)) {
+	constructor(url, fetchCatalog = fetch) {
 		this.url = url;
 		this.fetchCatalog = fetchCatalog;
 	}
@@ -456,7 +452,7 @@ var CatalogSource = class {
 		};
 		let response;
 		try {
-			response = await this.fetchCatalog(this.url, init);
+			response = await this.fetchCatalog.call(window, this.url, init);
 		} catch (cause) {
 			throw new CatalogLoadError("The Bingo catalog could not be downloaded.", true, { cause });
 		}
@@ -489,12 +485,6 @@ async function copyToClipboard(text, target = navigator) {
 		return false;
 	}
 }
-var browserAnimationScheduler = {
-	requestFrame: (callback) => window.requestAnimationFrame(callback),
-	cancelFrame: (handle) => window.cancelAnimationFrame(handle),
-	setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-	clearTimer: (handle) => window.clearTimeout(handle)
-};
 function isNavigationArrow(key) {
 	return key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
 }
@@ -508,6 +498,8 @@ function nextGridPosition(current, key, size) {
 	return current;
 }
 var copy = {
+	share: "SHARE",
+	copied: "COPIED",
 	loadingCatalog: "LOADING TILES...",
 	catalogError: "COULD NOT LOAD THE CATALOG.",
 	shuffleTitle: "SHUFFLE YOUR BOARD?",
@@ -519,7 +511,6 @@ var blackoutWavePositions = Array.from({ length: 25 }, (_, position) => position
 });
 var BingoView = class {
 	root;
-	scheduler;
 	durations;
 	reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 	actions;
@@ -546,10 +537,8 @@ var BingoView = class {
 	confirmationClosing = false;
 	freeLabelTimer = 0;
 	freeLabelTarget = fridayLabel;
-	lastBoardWidth = 0;
-	constructor(root, scheduler = browserAnimationScheduler) {
+	constructor(root) {
 		this.root = root;
-		this.scheduler = scheduler;
 		root.innerHTML = markup();
 		const styles = getComputedStyle(root);
 		this.durations = {
@@ -557,7 +546,7 @@ var BingoView = class {
 			standard: duration(styles, "--duration-standard"),
 			long: duration(styles, "--duration-long")
 		};
-		this.actions = this.required(".actions");
+		this.actions = this.required(".header-action");
 		this.shuffleButton = this.required(".shuffle-button");
 		this.shareButton = this.required(".share-button");
 		this.shareLabel = this.required(".share-label");
@@ -571,13 +560,9 @@ var BingoView = class {
 		this.confirmationCancel = this.required(".confirmation-cancel");
 		this.confirmationConfirm = this.required(".confirmation-confirm");
 		this.liveRegion = this.required(".live-region");
-		if (typeof ResizeObserver !== "undefined") new ResizeObserver(([entry]) => {
-			const width = entry?.contentRect.width ?? 0;
-			if (width <= 0 || Math.abs(width - this.lastBoardWidth) < .5) return;
-			this.lastBoardWidth = width;
-			this.requestLabelFit();
+		new ResizeObserver(([entry]) => {
+			if ((entry?.contentRect.width ?? 0) > 0) this.requestLabelFit();
 		}).observe(this.board);
-		else window.addEventListener("resize", () => this.requestLabelFit());
 		document.fonts?.ready.then(() => this.requestLabelFit());
 	}
 	bind(handlers) {
@@ -611,7 +596,6 @@ var BingoView = class {
 		});
 	}
 	showReady(catalog, state) {
-		this.tilesById.clear();
 		for (const tile of catalog) this.tilesById.set(tile.id, tile);
 		this.boardStatus.hidden = true;
 		this.board.hidden = false;
@@ -640,7 +624,7 @@ var BingoView = class {
 	renderBoard(state) {
 		this.dismissShuffleConfirmation();
 		this.boardCard.classList.remove("is-celebrating");
-		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
+		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		this.freeLabelTarget = this.freeTileLabel(state);
 		const fragment = document.createDocumentFragment();
@@ -672,7 +656,7 @@ var BingoView = class {
 		const completedPositions = positionsForLines(completedLineIds(state.marked));
 		const winningPositions = winningOpportunityPositions(state.marked);
 		this.board.querySelectorAll(".tile").forEach((button, index) => {
-			const tile = this.tileById(state.layout[index] ?? "");
+			const tile = this.tileById(state.layout[index]);
 			const marked = state.marked.has(index);
 			const winningOpportunity = winningPositions.has(index);
 			button.classList.toggle("marked", marked);
@@ -690,12 +674,12 @@ var BingoView = class {
 		this.actions.inert = true;
 		this.board.inert = true;
 		this.animateConfirmationScrim(1);
-		const targetHeight = this.confirmationPanel.offsetHeight;
 		this.confirmationCancel.focus({ preventScroll: true });
 		if (this.reducedMotion.matches) {
 			this.confirmationShell.style.height = "auto";
 			return;
 		}
+		const targetHeight = this.confirmationPanel.offsetHeight;
 		this.confirmationShell.style.height = `${targetHeight}px`;
 		const motion = this.confirmationShell.animate({ height: ["0px", `${targetHeight}px`] }, {
 			duration: this.durations.standard,
@@ -703,15 +687,15 @@ var BingoView = class {
 		});
 		this.confirmationShellMotion = motion;
 		motion.finished.then(() => {
-			if (this.confirmationShellMotion !== motion || this.confirmationClosing) return;
+			if (this.confirmationShellMotion !== motion) return;
 			this.confirmationShellMotion = null;
 			this.confirmationShell.style.height = "auto";
 		}, () => {});
 	}
-	hideShuffleConfirmation(onClosed = () => {}) {
+	hideShuffleConfirmation(onClosed) {
 		if (this.confirmation.hidden || this.confirmationClosing) return;
 		this.confirmationClosing = true;
-		const currentHeight = this.confirmationShell.getBoundingClientRect().height;
+		const currentHeight = this.reducedMotion.matches ? 0 : this.confirmationShell.getBoundingClientRect().height;
 		this.confirmationShellMotion?.cancel();
 		this.confirmationShellMotion = null;
 		this.animateConfirmationScrim(0);
@@ -720,7 +704,7 @@ var BingoView = class {
 			queueMicrotask(() => {
 				if (!this.confirmationClosing) return;
 				this.dismissShuffleConfirmation();
-				onClosed();
+				onClosed?.();
 			});
 			return;
 		}
@@ -732,7 +716,7 @@ var BingoView = class {
 		motion.finished.then(() => {
 			if (this.confirmationShellMotion !== motion) return;
 			this.dismissShuffleConfirmation();
-			onClosed();
+			onClosed?.();
 		}, () => {});
 	}
 	dismissShuffleConfirmation() {
@@ -750,11 +734,11 @@ var BingoView = class {
 		this.shuffleButton.focus({ preventScroll: true });
 	}
 	animateConfirmationScrim(targetOpacity) {
-		const currentOpacity = Number.parseFloat(getComputedStyle(this.confirmationScrim).opacity) || 0;
+		const currentOpacity = this.reducedMotion.matches ? targetOpacity : Number.parseFloat(getComputedStyle(this.confirmationScrim).opacity) || 0;
 		this.confirmationScrimMotion?.cancel();
 		this.confirmationScrimMotion = null;
 		this.confirmationScrim.style.opacity = `${targetOpacity}`;
-		if (this.reducedMotion.matches || currentOpacity === targetOpacity) return;
+		if (currentOpacity === targetOpacity) return;
 		const motion = this.confirmationScrim.animate({ opacity: [`${currentOpacity}`, `${targetOpacity}`] }, {
 			duration: this.durations.standard,
 			easing: "ease"
@@ -766,20 +750,18 @@ var BingoView = class {
 	}
 	showShareCopied() {
 		this.cancelShareFeedback();
-		this.swapShareLabel("COPIED", () => {
-			this.shareFeedbackTimer = this.scheduler.setTimer(() => {
+		this.swapShareLabel(copy.copied, () => {
+			this.shareFeedbackTimer = window.setTimeout(() => {
 				this.shareFeedbackTimer = 0;
-				this.swapShareLabel("SHARE");
+				this.swapShareLabel(copy.share);
 			}, this.durations.long);
 		});
 	}
 	announce(message) {
-		this.scheduler.cancelFrame(this.announcementFrame);
-		this.announcementFrame = 0;
+		window.cancelAnimationFrame(this.announcementFrame);
 		this.liveRegion.textContent = "";
 		if (!message) return;
-		this.announcementFrame = this.scheduler.requestFrame(() => {
-			this.announcementFrame = 0;
+		this.announcementFrame = window.requestAnimationFrame(() => {
 			this.liveRegion.textContent = message;
 		});
 	}
@@ -802,10 +784,10 @@ var BingoView = class {
 	}
 	clearShareFeedback() {
 		this.cancelShareFeedback();
-		this.shareLabel.textContent = "SHARE";
+		this.shareLabel.textContent = copy.share;
 	}
 	cancelShareFeedback() {
-		if (this.shareFeedbackTimer) this.scheduler.clearTimer(this.shareFeedbackTimer);
+		if (this.shareFeedbackTimer) window.clearTimeout(this.shareFeedbackTimer);
 		this.shareFeedbackTimer = 0;
 		this.shareFeedbackFade?.cancel();
 		this.shareFeedbackFade = null;
@@ -840,7 +822,7 @@ var BingoView = class {
 		const text = this.freeTileLabel(state);
 		if (text === this.freeLabelTarget) return;
 		this.freeLabelTarget = text;
-		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
+		if (this.freeLabelTimer) window.clearTimeout(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		const labels = this.board.querySelectorAll(".tile.free .tile-label");
 		if (this.reducedMotion.matches) {
@@ -852,7 +834,7 @@ var BingoView = class {
 			return;
 		}
 		labels.forEach((label) => label.classList.add("fading"));
-		this.freeLabelTimer = this.scheduler.setTimer(() => {
+		this.freeLabelTimer = window.setTimeout(() => {
 			this.freeLabelTimer = 0;
 			labels.forEach((label) => {
 				label.textContent = text;
@@ -890,7 +872,7 @@ var BingoView = class {
 		this.boardCard.offsetWidth;
 		winningPositions.forEach((position, order) => {
 			const tile = this.board.querySelector(`[data-index="${position}"]`);
-			if (!tile) return;
+			if (!tile) throw new Error(`Missing Bingo tile at position ${position}.`);
 			tile.style.setProperty("--win-delay", `${order * (blackout ? 35 : 80)}ms`);
 			tile.classList.add("is-celebrating");
 		});
@@ -919,9 +901,8 @@ var BingoView = class {
 		}
 	}
 	requestLabelFit() {
-		this.scheduler.cancelFrame(this.fitFrame);
-		this.fitFrame = this.scheduler.requestFrame(() => {
-			this.fitFrame = 0;
+		window.cancelAnimationFrame(this.fitFrame);
+		this.fitFrame = window.requestAnimationFrame(() => {
 			this.fitLabels();
 		});
 	}
@@ -929,7 +910,9 @@ var BingoView = class {
 		const active = document.activeElement instanceof HTMLElement ? document.activeElement.closest(".tile") : null;
 		if (!active || !this.board.contains(active)) return;
 		const next = nextGridPosition(Number(active.dataset.index), key, 5);
-		this.board.querySelector(`[data-index="${next}"]`)?.focus({ preventScroll: true });
+		const tile = this.board.querySelector(`[data-index="${next}"]`);
+		if (!tile) throw new Error(`Missing Bingo tile at position ${next}.`);
+		tile.focus({ preventScroll: true });
 	}
 	fitLabels() {
 		const buttons = this.board.querySelectorAll(".tile");
@@ -976,7 +959,7 @@ function markup() {
       <h1>RELEASE RADAR&#10022;</h1>
       <div class="header-action actions" aria-label="Bingo actions">
         <button class="button shuffle-button glass" type="button" disabled>SHUFFLE</button>
-        <button class="button share-button glass" type="button" disabled><span class="share-label">SHARE</span></button>
+        <button class="button share-button glass" type="button" disabled><span class="share-label">${copy.share}</span></button>
       </div>
       <div class="board-stage">
         <section class="board-card glass" aria-busy="true">
@@ -1002,17 +985,13 @@ function markup() {
   `;
 }
 var root = document.querySelector("#bingo");
-if (root && !root.dataset.bingoReady) {
-	root.dataset.bingoReady = "true";
+if (root) {
 	const moduleUrl = new URL(import.meta.url);
 	const catalogUrl = new URL("tiles.json", moduleUrl);
 	catalogUrl.search = moduleUrl.search;
 	const view = new BingoView(root);
 	const location = new BoardLocation();
-	const controller = new BingoController(new Catalog(new CatalogSource(catalogUrl), {
-		setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-		clearTimeout: (handle) => window.clearTimeout(handle)
-	}), new BoardStorage(), location, view, copyToClipboard);
+	const controller = new BingoController(new Catalog(new CatalogSource(catalogUrl), window), new BoardStorage(), location, view, copyToClipboard);
 	view.bind({
 		shuffle: () => controller.requestShuffle(),
 		confirmShuffle: () => controller.shuffleBoard(),

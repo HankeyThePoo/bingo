@@ -191,11 +191,6 @@ body {
 
 #bingo .share-label {
   opacity: 1;
-  transition: opacity var(--duration-fast) ease;
-}
-
-#bingo .share-label.fading {
-  opacity: 0;
 }
 
 #bingo .header-action {
@@ -391,11 +386,27 @@ body {
   justify-content: center;
   padding: calc(var(--space) * 4);
   border-radius: inherit;
-  background: var(--dark-layer);
 }
 
 #bingo .shuffle-confirmation[hidden] {
   display: none;
+}
+
+#bingo .shuffle-scrim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--dark-layer);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#bingo .shuffle-shell {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 430px);
+  height: 0;
+  overflow: hidden;
 }
 
 #bingo .bingo-modal {
@@ -403,7 +414,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: calc(var(--space) * 4);
-  width: min(100%, 430px);
+  width: 100%;
   padding: calc(var(--space) * 4);
   text-align: center;
   text-transform: uppercase;
@@ -411,14 +422,10 @@ body {
 
 #bingo .confirmation-panel strong {
   width: fit-content;
-  background: var(--gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--off-white);
   font-size: var(--text-large);
   font-weight: 800;
   line-height: 1.2;
-  -webkit-text-fill-color: transparent;
 }
 
 #bingo .confirmation-panel > span {

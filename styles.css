@@ -23,12 +23,6 @@ body {
     var(--gradient-middle) 50%,
     var(--gradient-end)
   );
-  --gradient-background: linear-gradient(
-    135deg,
-    rgb(from var(--gradient-start) r g b / 12%),
-    rgb(from var(--gradient-middle) r g b / 12%) 50%,
-    rgb(from var(--gradient-end) r g b / 12%)
-  );
   --glass-layer: rgb(from var(--off-white) r g b / 2%);
   --white-layer: rgb(from var(--off-white) r g b / 20%);
   --dark-layer: rgb(from var(--near-black) r g b / 40%);
@@ -42,16 +36,12 @@ body {
   --text-base: 15px;
   --text-large: calc(var(--text-small) * 2);
   --text-display: calc(var(--text-base) * 2);
-  --line-height: calc(var(--text-base) * 1.2);
 
   --opacity-secondary: 80%;
   --glass-blur: 20px;
   --shadow-surface: 0 6px 18px var(--dark-layer);
 
   --duration-fast: 200ms;
-  --duration-standard: 400ms;
-  --duration-long: 600ms;
-  --duration-share-visible: 680ms;
   --duration-share-fade: 200ms;
   --duration-free-label: 180ms;
   --duration-tile-flip: 380ms;

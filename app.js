@@ -136,7 +136,7 @@ function positionsForLines(lineIds) {
 	return positions;
 }
 function hasManualMarks(state) {
-	return [...state.marked].some((index) => index !== freeTileIndex);
+	return state.marked.size > 1;
 }
 function isRecord$1(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
@@ -178,15 +178,16 @@ function parseSnapshot(value, catalog) {
 }
 function encodeState(state, catalog) {
 	const ordinaryIds = compactCatalogIds(catalog);
-	const available = [...ordinaryIds];
-	let layoutRank = 0n;
+	const indexBits = BigInt(Math.ceil(Math.log2(ordinaryIds.length)));
+	const seen = /* @__PURE__ */ new Set();
+	let layoutIndexes = 0n;
 	for (let index = 0; index < 25; index += 1) {
 		if (index === freeTileIndex) continue;
 		const id = state.layout[index];
-		const digit = id ? available.indexOf(id) : -1;
-		if (digit < 0) throw new Error("The board cannot be encoded with this catalog.");
-		layoutRank = layoutRank * BigInt(available.length) + BigInt(digit);
-		available.splice(digit, 1);
+		const catalogIndex = id ? ordinaryIds.indexOf(id) : -1;
+		if (!id || catalogIndex < 0 || seen.has(id)) throw new Error("The board cannot be encoded with this catalog.");
+		seen.add(id);
+		layoutIndexes = layoutIndexes << indexBits | BigInt(catalogIndex);
 	}
 	let marked = 0n;
 	let markedBit = 0n;
@@ -195,28 +196,28 @@ function encodeState(state, catalog) {
 		if (state.marked.has(index)) marked |= 1n << markedBit;
 		markedBit += 1n;
 	}
-	const permutations = permutationCount(ordinaryIds.length, 24);
-	return encodeBigInt(BigInt(catalogFingerprint(ordinaryIds)) * permutations + layoutRank << compactMarkBits | marked);
+	return encodeBigInt((BigInt(catalogFingerprint(ordinaryIds)) << indexBits * BigInt(24) | layoutIndexes) << compactMarkBits | marked);
 }
 function decodeState(payload, catalog) {
 	try {
 		const ordinaryIds = compactCatalogIds(catalog);
-		const permutations = permutationCount(ordinaryIds.length, 24);
+		const indexBits = BigInt(Math.ceil(Math.log2(ordinaryIds.length)));
+		const indexMask = (1n << indexBits) - 1n;
 		const packed = decodeBigInt(payload);
 		if (packed === null) return null;
 		const markedMask = packed & compactMarkMask;
-		const catalogAndLayout = packed >> compactMarkBits;
-		if (Number(catalogAndLayout / permutations) !== catalogFingerprint(ordinaryIds)) return null;
-		let layoutRank = catalogAndLayout % permutations;
-		const digits = new Array(24);
+		let catalogAndLayout = packed >> compactMarkBits;
+		const indexes = new Array(24);
+		const seen = /* @__PURE__ */ new Set();
 		for (let index = 23; index >= 0; index -= 1) {
-			const radix = BigInt(ordinaryIds.length - index);
-			digits[index] = Number(layoutRank % radix);
-			layoutRank /= radix;
+			const catalogIndex = Number(catalogAndLayout & indexMask);
+			if (catalogIndex >= ordinaryIds.length || seen.has(catalogIndex)) return null;
+			indexes[index] = catalogIndex;
+			seen.add(catalogIndex);
+			catalogAndLayout >>= indexBits;
 		}
-		if (layoutRank !== 0n) return null;
-		const available = [...ordinaryIds];
-		const layout = digits.map((digit) => available.splice(digit, 1)[0]);
+		if (Number(catalogAndLayout) !== catalogFingerprint(ordinaryIds)) return null;
+		const layout = indexes.map((index) => ordinaryIds[index]);
 		layout.splice(freeTileIndex, 0, fridayId);
 		const marked = /* @__PURE__ */ new Set();
 		let markedBit = 0n;
@@ -243,11 +244,6 @@ function compactCatalogIds(catalog) {
 	const ids = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
 	if (ids.length < 24 || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
 	return ids;
-}
-function permutationCount(size, count) {
-	let result = 1n;
-	for (let index = 0; index < count; index += 1) result *= BigInt(size - index);
-	return result;
 }
 function catalogFingerprint(ids) {
 	let hash = 2166136261;
@@ -348,7 +344,7 @@ var BingoController = class {
 	shuffleBoard() {
 		if (!this.state) return;
 		this.state = createState(generateBoard(this.catalog, this.random));
-		this.view.renderBoard(this.state, true);
+		this.view.renderBoard(this.state);
 		this.view.announce(this.saveWithAnnouncement("A new Bingo board was shuffled."));
 	}
 	async shareBoard() {
@@ -369,7 +365,7 @@ var BingoController = class {
 			return;
 		}
 		this.state = shared.state;
-		this.view.renderBoard(this.state, true);
+		this.view.renderBoard(this.state);
 		this.view.announce(this.saveWithAnnouncement("A shared Bingo board was loaded."));
 	}
 	saveWithAnnouncement(announcement) {
@@ -531,12 +527,6 @@ var browserAnimationScheduler = {
 	setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
 	clearTimer: (handle) => window.clearTimeout(handle)
 };
-var copy = {
-	loadingCatalog: "LOADING TILES...",
-	catalogError: "COULD NOT LOAD THE CATALOG.",
-	shuffleTitle: "SHUFFLE YOUR BOARD?",
-	shuffleWarning: "YOUR CURRENT MARKS WILL BE LOST."
-};
 function isNavigationArrow(key) {
 	return key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
 }
@@ -549,6 +539,12 @@ function nextGridPosition(current, key, size) {
 	if (key === "ArrowDown" && row < size - 1) return current + size;
 	return current;
 }
+var copy = {
+	loadingCatalog: "LOADING TILES...",
+	catalogError: "COULD NOT LOAD THE CATALOG.",
+	shuffleTitle: "SHUFFLE YOUR BOARD?",
+	shuffleWarning: "YOUR CURRENT MARKS WILL BE LOST."
+};
 var boardCenter = Math.floor(5 / 2);
 var blackoutWavePositions = Array.from({ length: 25 }, (_, position) => position).sort((left, right) => {
 	return Math.abs(Math.floor(left / 5) - boardCenter) + Math.abs(left % 5 - boardCenter) - (Math.abs(Math.floor(right / 5) - boardCenter) + Math.abs(right % 5 - boardCenter)) || left - right;
@@ -571,11 +567,9 @@ var BingoView = class {
 	announcementFrame = 0;
 	fitFrame = 0;
 	shareFeedbackTimer = 0;
-	shareFeedbackGeneration = 0;
 	freeLabelTimer = 0;
 	freeLabelTarget = fridayLabel;
 	lastBoardWidth = 0;
-	confirmationOpen = false;
 	constructor(root, scheduler = browserAnimationScheduler) {
 		this.root = root;
 		this.scheduler = scheduler;
@@ -609,10 +603,10 @@ var BingoView = class {
 			handlers.toggleTile(Number(target.dataset.index));
 		});
 		this.confirmationCancel.addEventListener("click", () => {
-			this.hideShuffleConfirmation(true);
+			this.hideShuffleConfirmation();
 		});
 		this.confirmationConfirm.addEventListener("click", () => {
-			this.hideShuffleConfirmation(true);
+			this.hideShuffleConfirmation();
 			handlers.confirmShuffle();
 		});
 		this.root.addEventListener("keydown", (event) => this.handleKeydown(event), true);
@@ -631,7 +625,7 @@ var BingoView = class {
 			if (event instanceof AnimationEvent && event.animationName === "bingo-card-glow") this.boardCard.classList.remove("is-celebrating");
 		});
 	}
-	showReady(catalog, state, deal = true) {
+	showReady(catalog, state) {
 		this.tilesById.clear();
 		for (const tile of catalog) this.tilesById.set(tile.id, tile);
 		this.boardStatus.hidden = true;
@@ -639,7 +633,7 @@ var BingoView = class {
 		this.boardCard.setAttribute("aria-busy", "false");
 		this.shuffleButton.disabled = false;
 		this.shareButton.disabled = false;
-		this.renderBoard(state, deal);
+		this.renderBoard(state);
 	}
 	showLoading() {
 		this.board.hidden = true;
@@ -658,8 +652,8 @@ var BingoView = class {
 		this.shareButton.disabled = true;
 		this.announce(error instanceof Error ? error.message : "The Bingo catalog could not be loaded.");
 	}
-	renderBoard(state, deal) {
-		this.hideShuffleConfirmation(true);
+	renderBoard(state) {
+		this.hideShuffleConfirmation();
 		this.boardCard.classList.remove("is-celebrating");
 		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
@@ -674,7 +668,7 @@ var BingoView = class {
 			button.className = "tile";
 			button.dataset.index = String(index);
 			button.style.setProperty("--deal-order", String(index));
-			if (deal) button.classList.add("is-dealing");
+			button.classList.add("is-dealing");
 			if (index === freeTileIndex) {
 				button.classList.add("free");
 				button.setAttribute("aria-disabled", "true");
@@ -708,31 +702,26 @@ var BingoView = class {
 		if (newlyCompletedLineIds.length) this.celebrate(newlyCompletedLineIds, state);
 	}
 	showShuffleConfirmation() {
-		if (this.confirmationOpen) return;
-		this.confirmationOpen = true;
+		if (!this.confirmation.hidden) return;
 		this.confirmation.hidden = false;
-		this.confirmation.setAttribute("aria-hidden", "false");
 		this.actions.inert = true;
 		this.board.inert = true;
 		this.confirmationCancel.focus({ preventScroll: true });
 	}
-	hideShuffleConfirmation(returnFocus) {
-		if (!this.confirmationOpen) return;
-		this.confirmationOpen = false;
+	hideShuffleConfirmation() {
+		if (this.confirmation.hidden) return;
 		this.confirmation.hidden = true;
-		this.confirmation.setAttribute("aria-hidden", "true");
 		this.actions.inert = false;
 		this.board.inert = false;
-		if (returnFocus) this.shuffleButton.focus({ preventScroll: true });
+		this.shuffleButton.focus({ preventScroll: true });
 	}
 	showShareCopied() {
 		if (this.shareFeedbackTimer) this.scheduler.clearTimer(this.shareFeedbackTimer);
-		const generation = ++this.shareFeedbackGeneration;
 		this.shareLabel.classList.remove("fading");
 		this.shareLabel.textContent = "COPIED";
 		this.shareFeedbackTimer = this.scheduler.setTimer(() => {
 			this.shareFeedbackTimer = 0;
-			this.swapShareLabel("SHARE", generation);
+			this.swapShareLabel("SHARE");
 		}, 680);
 	}
 	announce(message) {
@@ -757,7 +746,7 @@ var BingoView = class {
 		face.append(text);
 		return face;
 	}
-	swapShareLabel(text, generation) {
+	swapShareLabel(text) {
 		if (this.shareLabel.textContent === text || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 			this.shareLabel.textContent = text;
 			return;
@@ -765,8 +754,8 @@ var BingoView = class {
 		this.shareLabel.classList.remove("fading");
 		this.shareLabel.offsetWidth;
 		this.shareLabel.classList.add("fading");
-		this.scheduler.setTimer(() => {
-			if (generation !== this.shareFeedbackGeneration) return;
+		this.shareFeedbackTimer = this.scheduler.setTimer(() => {
+			this.shareFeedbackTimer = 0;
 			this.shareLabel.textContent = text;
 			this.shareLabel.classList.remove("fading");
 		}, 200);
@@ -837,10 +826,10 @@ var BingoView = class {
 			event.preventDefault();
 			this.moveBoardFocus(event.key);
 		}
-		if (!this.confirmationOpen) return;
+		if (this.confirmation.hidden) return;
 		if (event.key === "Escape") {
 			event.preventDefault();
-			this.hideShuffleConfirmation(true);
+			this.hideShuffleConfirmation();
 			return;
 		}
 		if (event.key !== "Tab") return;
@@ -912,7 +901,7 @@ function markup() {
         <section class="card board-card glass" aria-busy="true">
           <p class="board-status" role="status">${copy.loadingCatalog}</p>
           <div class="board" role="group" aria-label="Bingo board" hidden></div>
-          <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" aria-hidden="true" hidden>
+          <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" hidden>
             <div class="bingo-modal confirmation-panel glass">
               <strong id="bingo-shuffle-title">${copy.shuffleTitle}</strong>
               <span id="bingo-shuffle-warning">${copy.shuffleWarning}</span>

@@ -131,7 +131,6 @@ body {
   opacity: 1;
 }
 
-#bingo .row,
 #bingo .actions {
   display: flex;
   justify-content: center;
@@ -157,16 +156,6 @@ body {
   pointer-events: none;
 }
 
-#bingo .game-surface {
-  display: grid;
-  gap: calc(var(--space) * 4);
-}
-
-#bingo .card {
-  padding: calc(var(--space) * 4);
-  border-radius: var(--radius);
-}
-
 #bingo .button {
   display: inline-flex;
   align-items: center;
@@ -183,10 +172,7 @@ body {
   font-size: var(--text-base);
   font-weight: 800;
   text-transform: uppercase;
-  transition:
-    filter var(--duration-fast) ease,
-    opacity var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
+  transition: opacity var(--duration-fast) ease;
 }
 
 #bingo .share-label {
@@ -194,10 +180,16 @@ body {
 }
 
 #bingo .header-action {
-  margin: 0 auto;
+  width: 100%;
+}
+
+#bingo .header-action .button {
+  width: min(180px, 25%);
+  padding: 0 calc(var(--space) * 3);
 }
 
 #bingo .board-stage {
+  display: grid;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -208,6 +200,7 @@ body {
 #bingo .board-card {
   width: min(100cqw, 100cqh, 720px);
   aspect-ratio: 1;
+  padding: calc(var(--space) * 4);
 }
 
 #bingo .board-status {
@@ -292,7 +285,6 @@ body {
 #bingo .tile-back {
   border: var(--line-width) solid var(--white-layer);
   background: var(--dark-layer);
-  color: var(--off-white);
   transform: rotateY(180deg);
   transition:
     color var(--duration-standard) ease,
@@ -388,10 +380,6 @@ body {
   border-radius: inherit;
 }
 
-#bingo .shuffle-confirmation[hidden] {
-  display: none;
-}
-
 #bingo .shuffle-scrim {
   position: absolute;
   inset: 0;
@@ -409,7 +397,7 @@ body {
   overflow: hidden;
 }
 
-#bingo .bingo-modal {
+#bingo .confirmation-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -566,6 +554,13 @@ body {
 
   #bingo .actions .button {
     flex: 1 1 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  #bingo .header-action .button {
+    width: min(calc(var(--button-width) + var(--space) * 2), calc((100% - var(--space) * 3) / 2));
+    flex: 0 1 auto;
   }
 }
 

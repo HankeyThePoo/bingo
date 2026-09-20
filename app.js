@@ -63,9 +63,7 @@ function parseCatalog(value) {
 			label
 		});
 	}
-	const ordinaryCount = tiles.filter(({ id }) => id !== fridayId).length;
-	if (ordinaryCount < 24) throw new Error(`The catalog needs at least 24 ordinary tiles.`);
-	if (ordinaryCount > 64) throw new Error(`The catalog supports at most 64 ordinary tiles.`);
+	if (tiles.filter(({ id }) => id !== "its-friday").length < 24) throw new Error(`The catalog needs at least 24 ordinary tiles.`);
 	const friday = tiles.find(({ id }) => id === fridayId);
 	if (!friday || friday.label !== "It's Friday") throw new Error(`The catalog needs one ${fridayLabel} free tile.`);
 	return tiles;
@@ -149,9 +147,11 @@ function hasExactKeys$1(value, expected) {
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
 var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+var maxOrdinaryTileCount = 64;
 var catalogFingerprintModulus = 4096;
 var fingerprintLength = 2;
 var identifierLength = fingerprintLength + 24 + 4;
+var BoardShareCapacityError = class extends Error {};
 function encodeState(state, catalog) {
 	const ordinaryIds = compactCatalogIds(catalog);
 	const seen = /* @__PURE__ */ new Set();
@@ -217,7 +217,7 @@ function readBoardHash(hash, catalog) {
 }
 function compactCatalogIds(catalog) {
 	const ids = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
-	if (ids.length > 64) throw new Error(`Compact board identifiers support at most 64 ordinary tiles.`);
+	if (ids.length > maxOrdinaryTileCount) throw new BoardShareCapacityError(`Board sharing supports at most ${maxOrdinaryTileCount} ordinary tiles.`);
 	if (ids.length < 24 || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
 	return ids;
 }
@@ -283,7 +283,7 @@ var BingoController = class {
 			return;
 		}
 		const tile = this.catalog.find(({ id }) => id === this.state?.layout[index]);
-		if (!tile) return;
+		if (!tile) throw new Error(`Missing Bingo tile at position ${index}.`);
 		const result = toggleTile(this.state, index);
 		this.state = result.state;
 		this.view.updateState(this.state, result.newlyCompletedLineIds);
@@ -300,7 +300,15 @@ var BingoController = class {
 	async shareBoard() {
 		if (!this.state) return;
 		const generation = ++this.shareGeneration;
-		const copied = await this.copyToClipboard(encodeState(this.state, this.catalog));
+		let identifier;
+		try {
+			identifier = encodeState(this.state, this.catalog);
+		} catch (error) {
+			if (!(error instanceof BoardShareCapacityError)) throw error;
+			this.view.announce(error.message);
+			return;
+		}
+		const copied = await this.copyToClipboard(identifier);
 		if (generation !== this.shareGeneration) return;
 		if (copied) this.view.showShareCopied();
 		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
@@ -533,6 +541,7 @@ var BingoView = class {
 	root;
 	scheduler;
 	durations;
+	reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 	actions;
 	shuffleButton;
 	shareButton;
@@ -541,6 +550,9 @@ var BingoView = class {
 	board;
 	boardStatus;
 	confirmation;
+	confirmationScrim;
+	confirmationShell;
+	confirmationPanel;
 	confirmationCancel;
 	confirmationConfirm;
 	liveRegion;
@@ -548,6 +560,10 @@ var BingoView = class {
 	announcementFrame = 0;
 	fitFrame = 0;
 	shareFeedbackTimer = 0;
+	shareFeedbackFade = null;
+	confirmationShellMotion = null;
+	confirmationScrimMotion = null;
+	confirmationClosing = false;
 	freeLabelTimer = 0;
 	freeLabelTarget = fridayLabel;
 	lastBoardWidth = 0;
@@ -558,6 +574,7 @@ var BingoView = class {
 		const styles = getComputedStyle(root);
 		this.durations = {
 			fast: duration(styles, "--duration-fast"),
+			standard: duration(styles, "--duration-standard"),
 			long: duration(styles, "--duration-long")
 		};
 		this.actions = this.required(".actions");
@@ -568,6 +585,9 @@ var BingoView = class {
 		this.board = this.required(".board");
 		this.boardStatus = this.required(".board-status");
 		this.confirmation = this.required(".shuffle-confirmation");
+		this.confirmationScrim = this.required(".shuffle-scrim");
+		this.confirmationShell = this.required(".shuffle-shell");
+		this.confirmationPanel = this.required(".confirmation-panel");
 		this.confirmationCancel = this.required(".confirmation-cancel");
 		this.confirmationConfirm = this.required(".confirmation-confirm");
 		this.liveRegion = this.required(".live-region");
@@ -595,8 +615,7 @@ var BingoView = class {
 			this.hideShuffleConfirmation();
 		});
 		this.confirmationConfirm.addEventListener("click", () => {
-			this.hideShuffleConfirmation();
-			handlers.confirmShuffle();
+			this.hideShuffleConfirmation(handlers.confirmShuffle);
 		});
 		this.root.addEventListener("keydown", (event) => this.handleKeydown(event), true);
 		this.board.addEventListener("animationend", (event) => {
@@ -639,7 +658,7 @@ var BingoView = class {
 		this.announce(error instanceof Error ? error.message : "The Bingo catalog could not be loaded.");
 	}
 	renderBoard(state) {
-		this.hideShuffleConfirmation();
+		this.dismissShuffleConfirmation();
 		this.boardCard.classList.remove("is-celebrating");
 		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
@@ -690,17 +709,83 @@ var BingoView = class {
 		this.confirmation.hidden = false;
 		this.actions.inert = true;
 		this.board.inert = true;
+		this.animateConfirmationScrim(1);
+		const targetHeight = this.confirmationPanel.offsetHeight;
 		this.confirmationCancel.focus({ preventScroll: true });
+		if (this.reducedMotion.matches) {
+			this.confirmationShell.style.height = "auto";
+			return;
+		}
+		this.confirmationShell.style.height = `${targetHeight}px`;
+		const motion = this.confirmationShell.animate({ height: ["0px", `${targetHeight}px`] }, {
+			duration: this.durations.standard,
+			easing: "ease"
+		});
+		this.confirmationShellMotion = motion;
+		motion.finished.then(() => {
+			if (this.confirmationShellMotion !== motion || this.confirmationClosing) return;
+			this.confirmationShellMotion = null;
+			this.confirmationShell.style.height = "auto";
+		}, () => {});
 	}
-	hideShuffleConfirmation() {
+	hideShuffleConfirmation(onClosed = () => {}) {
+		if (this.confirmation.hidden || this.confirmationClosing) return;
+		this.confirmationClosing = true;
+		const currentHeight = this.confirmationShell.getBoundingClientRect().height;
+		this.confirmationShellMotion?.cancel();
+		this.confirmationShellMotion = null;
+		this.animateConfirmationScrim(0);
+		this.confirmationShell.style.height = "0px";
+		if (this.reducedMotion.matches) {
+			queueMicrotask(() => {
+				if (!this.confirmationClosing) return;
+				this.dismissShuffleConfirmation();
+				onClosed();
+			});
+			return;
+		}
+		const motion = this.confirmationShell.animate({ height: [`${currentHeight}px`, "0px"] }, {
+			duration: this.durations.standard,
+			easing: "ease"
+		});
+		this.confirmationShellMotion = motion;
+		motion.finished.then(() => {
+			if (this.confirmationShellMotion !== motion) return;
+			this.dismissShuffleConfirmation();
+			onClosed();
+		}, () => {});
+	}
+	dismissShuffleConfirmation() {
 		if (this.confirmation.hidden) return;
+		this.confirmationShellMotion?.cancel();
+		this.confirmationScrimMotion?.cancel();
+		this.confirmationShellMotion = null;
+		this.confirmationScrimMotion = null;
+		this.confirmationClosing = false;
 		this.confirmation.hidden = true;
+		this.confirmationScrim.style.opacity = "0";
+		this.confirmationShell.style.height = "";
 		this.actions.inert = false;
 		this.board.inert = false;
 		this.shuffleButton.focus({ preventScroll: true });
 	}
+	animateConfirmationScrim(targetOpacity) {
+		const currentOpacity = Number.parseFloat(getComputedStyle(this.confirmationScrim).opacity) || 0;
+		this.confirmationScrimMotion?.cancel();
+		this.confirmationScrimMotion = null;
+		this.confirmationScrim.style.opacity = `${targetOpacity}`;
+		if (this.reducedMotion.matches || currentOpacity === targetOpacity) return;
+		const motion = this.confirmationScrim.animate({ opacity: [`${currentOpacity}`, `${targetOpacity}`] }, {
+			duration: this.durations.standard,
+			easing: "ease"
+		});
+		this.confirmationScrimMotion = motion;
+		motion.finished.then(() => {
+			if (this.confirmationScrimMotion === motion) this.confirmationScrimMotion = null;
+		}, () => {});
+	}
 	showShareCopied() {
-		this.clearShareFeedback();
+		this.cancelShareFeedback();
 		this.swapShareLabel("COPIED", () => {
 			this.shareFeedbackTimer = this.scheduler.setTimer(() => {
 				this.shareFeedbackTimer = 0;
@@ -736,28 +821,40 @@ var BingoView = class {
 		return tile;
 	}
 	clearShareFeedback() {
-		if (this.shareFeedbackTimer) this.scheduler.clearTimer(this.shareFeedbackTimer);
-		this.shareFeedbackTimer = 0;
-		this.shareLabel.classList.remove("fading");
+		this.cancelShareFeedback();
 		this.shareLabel.textContent = "SHARE";
 	}
+	cancelShareFeedback() {
+		if (this.shareFeedbackTimer) this.scheduler.clearTimer(this.shareFeedbackTimer);
+		this.shareFeedbackTimer = 0;
+		this.shareFeedbackFade?.cancel();
+		this.shareFeedbackFade = null;
+	}
 	swapShareLabel(text, onVisible) {
-		if (this.shareLabel.textContent === text || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		if (this.shareLabel.textContent === text || this.reducedMotion.matches) {
 			this.shareLabel.textContent = text;
 			onVisible?.();
 			return;
 		}
-		this.shareLabel.classList.remove("fading");
-		this.shareLabel.offsetWidth;
-		this.shareLabel.classList.add("fading");
-		this.shareFeedbackTimer = this.scheduler.setTimer(() => {
+		const fadeOut = this.shareLabel.animate({ opacity: [getComputedStyle(this.shareLabel).opacity, "0"] }, {
+			duration: this.durations.fast,
+			easing: "ease"
+		});
+		this.shareFeedbackFade = fadeOut;
+		fadeOut.finished.then(() => {
+			if (this.shareFeedbackFade !== fadeOut) return;
 			this.shareLabel.textContent = text;
-			this.shareLabel.classList.remove("fading");
-			this.shareFeedbackTimer = this.scheduler.setTimer(() => {
-				this.shareFeedbackTimer = 0;
+			const fadeIn = this.shareLabel.animate({ opacity: ["0", "1"] }, {
+				duration: this.durations.fast,
+				easing: "ease"
+			});
+			this.shareFeedbackFade = fadeIn;
+			fadeIn.finished.then(() => {
+				if (this.shareFeedbackFade !== fadeIn) return;
+				this.shareFeedbackFade = null;
 				onVisible?.();
-			}, this.durations.fast);
-		}, this.durations.fast);
+			}, () => {});
+		}, () => {});
 	}
 	updateFreeTileLabel(state) {
 		const text = this.freeTileLabel(state);
@@ -766,7 +863,7 @@ var BingoView = class {
 		if (this.freeLabelTimer) this.scheduler.clearTimer(this.freeLabelTimer);
 		this.freeLabelTimer = 0;
 		const labels = this.board.querySelectorAll(".tile.free .tile-label");
-		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		if (this.reducedMotion.matches) {
 			labels.forEach((label) => {
 				label.textContent = text;
 				label.classList.remove("fading");
@@ -906,12 +1003,15 @@ function markup() {
           <p class="board-status" role="status">${copy.loadingCatalog}</p>
           <div class="board" role="group" aria-label="Bingo board" hidden></div>
           <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" hidden>
-            <div class="bingo-modal confirmation-panel glass">
-              <strong id="bingo-shuffle-title">${copy.shuffleTitle}</strong>
-              <span id="bingo-shuffle-warning">${copy.shuffleWarning}</span>
-              <div class="actions confirmation-actions">
-                <button class="button confirmation-cancel" type="button">CANCEL</button>
-                <button class="button confirmation-confirm" type="button">SHUFFLE</button>
+            <div class="shuffle-scrim" aria-hidden="true"></div>
+            <div class="shuffle-shell">
+              <div class="bingo-modal confirmation-panel glass">
+                <strong id="bingo-shuffle-title">${copy.shuffleTitle}</strong>
+                <span id="bingo-shuffle-warning">${copy.shuffleWarning}</span>
+                <div class="actions confirmation-actions">
+                  <button class="button confirmation-cancel" type="button">CANCEL</button>
+                  <button class="button confirmation-confirm" type="button">SHUFFLE</button>
+                </div>
               </div>
             </div>
           </div>

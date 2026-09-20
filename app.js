@@ -135,9 +135,6 @@ function positionsForLines(lineIds) {
 	}
 	return positions;
 }
-function hasManualMarks(state) {
-	return state.marked.size > 1;
-}
 function isRecord$1(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -147,11 +144,8 @@ function hasExactKeys$1(value, expected) {
 	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
 }
 var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-var maxOrdinaryTileCount = 64;
-var catalogFingerprintModulus = 4096;
 var fingerprintLength = 2;
 var identifierLength = fingerprintLength + 24 + 4;
-var BoardShareCapacityError = class extends Error {};
 function encodeState(state, catalog) {
 	const ordinaryIds = compactCatalogIds(catalog);
 	const seen = /* @__PURE__ */ new Set();
@@ -177,54 +171,47 @@ function encodeState(state, catalog) {
 	].map((shift) => alphabet.charAt(markedMask >>> shift & 63)).join("");
 }
 function decodeState(payload, catalog) {
-	try {
-		const ordinaryIds = compactCatalogIds(catalog);
-		if (payload.length !== identifierLength) return null;
-		const digits = [...payload].map((character) => alphabet.indexOf(character));
-		if (digits.some((digit) => digit < 0)) return null;
-		if (digits[0] * 64 + digits[1] !== catalogFingerprint(ordinaryIds)) return null;
-		const layout = [];
-		const seen = /* @__PURE__ */ new Set();
-		for (let index = 0; index < 24; index += 1) {
-			const catalogIndex = digits[fingerprintLength + index];
-			if (catalogIndex >= ordinaryIds.length || seen.has(catalogIndex)) return null;
-			layout.push(ordinaryIds[catalogIndex]);
-			seen.add(catalogIndex);
-		}
-		layout.splice(freeTileIndex, 0, fridayId);
-		let markedMask = 0;
-		for (const digit of digits.slice(-4)) markedMask = markedMask * 64 + digit;
-		const marked = /* @__PURE__ */ new Set();
-		let markedBit = 0;
-		for (let index = 0; index < 25; index += 1) {
-			if (index === freeTileIndex) marked.add(index);
-			else if ((markedMask & 1 << markedBit) !== 0) marked.add(index);
-			if (index !== freeTileIndex) markedBit += 1;
-		}
-		return restoreState(layout, marked);
-	} catch {
-		return null;
+	const ordinaryIds = compactCatalogIds(catalog);
+	if (payload.length !== identifierLength) return null;
+	const digits = [...payload].map((character) => alphabet.indexOf(character));
+	if (digits.some((digit) => digit < 0)) return null;
+	if (digits[0] * 64 + digits[1] !== catalogFingerprint(ordinaryIds)) return null;
+	const layout = [];
+	const seen = /* @__PURE__ */ new Set();
+	for (let index = 0; index < 24; index += 1) {
+		const catalogIndex = digits[fingerprintLength + index];
+		if (catalogIndex >= ordinaryIds.length || seen.has(catalogIndex)) return null;
+		layout.push(ordinaryIds[catalogIndex]);
+		seen.add(catalogIndex);
 	}
+	layout.splice(freeTileIndex, 0, fridayId);
+	let markedMask = 0;
+	for (const digit of digits.slice(-4)) markedMask = markedMask * 64 + digit;
+	const marked = /* @__PURE__ */ new Set();
+	let markedBit = 0;
+	for (let index = 0; index < 25; index += 1) {
+		if (index === freeTileIndex) marked.add(index);
+		else if ((markedMask & 1 << markedBit) !== 0) marked.add(index);
+		if (index !== freeTileIndex) markedBit += 1;
+	}
+	return restoreState(layout, marked);
 }
 function readBoardHash(hash, catalog) {
-	const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-	if (!params.has("board")) return { kind: "none" };
-	const state = decodeState(params.get("board") ?? "", catalog);
+	const payload = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash).get("board");
+	if (payload === null) return { kind: "none" };
+	const state = decodeState(payload, catalog);
 	return state ? {
 		kind: "valid",
 		state
 	} : { kind: "invalid" };
 }
 function compactCatalogIds(catalog) {
-	const ids = catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
-	if (ids.length > maxOrdinaryTileCount) throw new BoardShareCapacityError(`Board sharing supports at most ${maxOrdinaryTileCount} ordinary tiles.`);
-	if (ids.length < 24 || new Set(ids).size !== ids.length) throw new Error("The catalog cannot be used for compact board identifiers.");
-	return ids;
+	return catalog.filter(({ id }) => id !== fridayId).map(({ id }) => id).sort();
 }
 function catalogFingerprint(ids) {
 	let hash = 2166136261;
 	for (const character of ids.join("\0")) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-	return (hash >>> 0) % catalogFingerprintModulus;
+	return (hash >>> 0) % 64 ** fingerprintLength;
 }
 var BingoController = class {
 	catalogLoader;
@@ -273,7 +260,7 @@ var BingoController = class {
 	}
 	requestShuffle() {
 		if (!this.state) return;
-		if (hasManualMarks(this.state)) this.view.showShuffleConfirmation();
+		if (this.state.marked.size > 1) this.view.showShuffleConfirmation();
 		else this.shuffleBoard();
 	}
 	markTile(index) {
@@ -300,15 +287,7 @@ var BingoController = class {
 	async shareBoard() {
 		if (!this.state) return;
 		const generation = ++this.shareGeneration;
-		let identifier;
-		try {
-			identifier = encodeState(this.state, this.catalog);
-		} catch (error) {
-			if (!(error instanceof BoardShareCapacityError)) throw error;
-			this.view.announce(error.message);
-			return;
-		}
-		const copied = await this.copyToClipboard(identifier);
+		const copied = await this.copyToClipboard(encodeState(this.state, this.catalog));
 		if (generation !== this.shareGeneration) return;
 		if (copied) this.view.showShareCopied();
 		this.view.announce(copied ? "The board identifier was copied." : "The board identifier could not be copied.");
@@ -329,7 +308,8 @@ var BingoController = class {
 	saveWithAnnouncement(announcement) {
 		if (!this.state || this.storage.save(this.state) || this.persistenceFailureAnnounced) return announcement;
 		this.persistenceFailureAnnounced = true;
-		return [announcement, "Board changes cannot be saved in this browser."].filter(Boolean).join(" ");
+		const failure = "Board changes cannot be saved in this browser.";
+		return announcement ? `${announcement} ${failure}` : failure;
 	}
 };
 var retryDelayMs = 5e3;
@@ -432,7 +412,7 @@ function parseSnapshot(value, catalog) {
 		seen.add(id);
 		layout.push(id);
 	}
-	if (layout[freeTileIndex] !== "its-friday" || layout.filter((id) => id === "its-friday").length !== 1) return null;
+	if (layout[freeTileIndex] !== "its-friday") return null;
 	const mask = Number(value.marked);
 	if (Math.floor(mask / 2 ** freeTileIndex) % 2 !== 1) return null;
 	const marked = /* @__PURE__ */ new Set();
@@ -992,23 +972,23 @@ function duration(styles, name) {
 }
 function markup() {
 	return `
-    <main class="wrap bingo-shell">
+    <main class="wrap">
       <h1>RELEASE RADAR&#10022;</h1>
-      <div class="row header-action actions" aria-label="Bingo actions">
-        <button class="button shuffle-button" type="button" disabled>SHUFFLE</button>
-        <button class="button share-button" type="button" disabled><span class="share-label">SHARE</span></button>
+      <div class="header-action actions" aria-label="Bingo actions">
+        <button class="button shuffle-button glass" type="button" disabled>SHUFFLE</button>
+        <button class="button share-button glass" type="button" disabled><span class="share-label">SHARE</span></button>
       </div>
-      <div class="game-surface board-stage">
-        <section class="card board-card glass" aria-busy="true">
+      <div class="board-stage">
+        <section class="board-card glass" aria-busy="true">
           <p class="board-status" role="status">${copy.loadingCatalog}</p>
           <div class="board" role="group" aria-label="Bingo board" hidden></div>
           <div class="shuffle-confirmation" role="dialog" aria-modal="true" aria-labelledby="bingo-shuffle-title" aria-describedby="bingo-shuffle-warning" hidden>
             <div class="shuffle-scrim" aria-hidden="true"></div>
             <div class="shuffle-shell">
-              <div class="bingo-modal confirmation-panel glass">
+              <div class="confirmation-panel glass">
                 <strong id="bingo-shuffle-title">${copy.shuffleTitle}</strong>
                 <span id="bingo-shuffle-warning">${copy.shuffleWarning}</span>
-                <div class="actions confirmation-actions">
+                <div class="actions">
                   <button class="button confirmation-cancel" type="button">CANCEL</button>
                   <button class="button confirmation-confirm" type="button">SHUFFLE</button>
                 </div>

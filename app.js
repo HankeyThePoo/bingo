@@ -135,9 +135,7 @@ function isRecord$1(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function hasExactKeys$1(value, expected) {
-	const actual = Object.keys(value).sort();
-	const sortedExpected = [...expected].sort();
-	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
+	return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 var fingerprintLength = 2;
@@ -393,7 +391,7 @@ function stateToSnapshot(state) {
 	let marked = 0;
 	for (const position of state.marked) marked |= 1 << position;
 	return {
-		layout: [...state.layout],
+		layout: state.layout,
 		marked
 	};
 }
@@ -426,9 +424,7 @@ function isRecord(value) {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function hasExactKeys(value, expected) {
-	const actual = Object.keys(value).sort();
-	const sortedExpected = [...expected].sort();
-	return actual.length === sortedExpected.length && sortedExpected.every((key, index) => actual[index] === key);
+	return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 var CatalogLoadError = class extends Error {
 	retryable;
@@ -584,7 +580,6 @@ var BingoView = class {
 		});
 		this.root.addEventListener("keydown", (event) => this.handleKeydown(event), true);
 		this.board.addEventListener("animationend", (event) => {
-			if (!(event instanceof AnimationEvent)) return;
 			const tile = event.target instanceof Element ? event.target.closest(".tile") : null;
 			if (event.animationName === "bingo-deal" && tile?.dataset.index === String(24)) this.board.querySelectorAll(".is-dealing").forEach((element) => {
 				element.classList.remove("is-dealing");
@@ -592,7 +587,7 @@ var BingoView = class {
 			if (event.animationName === "bingo-winning-tile") tile?.classList.remove("is-celebrating");
 		});
 		this.boardCard.addEventListener("animationend", (event) => {
-			if (event instanceof AnimationEvent && event.animationName === "bingo-card-glow") this.boardCard.classList.remove("is-celebrating");
+			if (event.animationName === "bingo-card-glow") this.boardCard.classList.remove("is-celebrating");
 		});
 	}
 	showReady(catalog, state) {
@@ -985,19 +980,18 @@ function markup() {
   `;
 }
 var root = document.querySelector("#bingo");
-if (root) {
-	const moduleUrl = new URL(import.meta.url);
-	const catalogUrl = new URL("tiles.json", moduleUrl);
-	catalogUrl.search = moduleUrl.search;
-	const view = new BingoView(root);
-	const location = new BoardLocation();
-	const controller = new BingoController(new Catalog(new CatalogSource(catalogUrl), window), new BoardStorage(), location, view, copyToClipboard);
-	view.bind({
-		shuffle: () => controller.requestShuffle(),
-		confirmShuffle: () => controller.shuffleBoard(),
-		share: () => void controller.shareBoard(),
-		toggleTile: (index) => controller.markTile(index)
-	});
-	location.subscribe(() => controller.restoreSharedBoard());
-	controller.bootstrap();
-}
+if (!root) throw new Error("Missing Bingo root.");
+var moduleUrl = new URL(import.meta.url);
+var catalogUrl = new URL("tiles.json", moduleUrl);
+catalogUrl.search = moduleUrl.search;
+var view = new BingoView(root);
+var location = new BoardLocation();
+var controller = new BingoController(new Catalog(new CatalogSource(catalogUrl), window), new BoardStorage(), location, view, copyToClipboard);
+view.bind({
+	shuffle: () => controller.requestShuffle(),
+	confirmShuffle: () => controller.shuffleBoard(),
+	share: () => void controller.shareBoard(),
+	toggleTile: (index) => controller.markTile(index)
+});
+location.subscribe(() => controller.restoreSharedBoard());
+controller.bootstrap();
